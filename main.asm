@@ -2,6 +2,7 @@
 	include "common.inc"
 	include "memory.inc"
 	include "serial.inc"
+	include "lcd.inc"
 
 	__CONFIG ( _CP_OFF & _DEBUG_OFF & _WRT_ENABLE_OFF & _CPD_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC )
 
@@ -48,9 +49,11 @@ main:
 
 	PUTCH_CSTR_INLINE putch_cstr_worker, msg_init
 
+	fcall	init_lcd
+	
 loop:
-	movlw	'a'
-	fcall	putch_usart
+;;; 	movlw	'a'
+;;; 	fcall	putch_usart
 	lgoto loop
 	
 

@@ -1,5 +1,5 @@
 SCRIPT = /usr/local/share/gputils/lkr/16f870.lkr
-OBJECTS = serial.o piceeprom.o
+OBJECTS = serial.o piceeprom.o lcd.o
 
 all:main.hex
 

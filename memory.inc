@@ -2,6 +2,10 @@
 #define arg1          0x75
 #define arg2          0x76
 
+;;; lcd.asm
+#define lcd_init_tmp1 0x80
+#define lcd_init_tmp2 0x81
+
 ;;; serial.asm
 #define serial_timeout_0 0xb3
 #define serial_timeout_1 0xb4
