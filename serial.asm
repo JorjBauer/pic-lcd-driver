@@ -43,15 +43,14 @@ serial	CODE
 check_start_serial:	
 	
 #define USART_HIGHSPEED 1
-#define USART_BAUD_INITIALIZER 0x22
+#define USART_BAUD_INITIALIZER 0x16
 	
 init_serial:
-	bsf	STATUS, RP0	; move to page 1
-
 	;; The USART requires that bits [21] of TRISB are enabled, or you'll
 	;; get unpredictable results from it. Some PICs won't work at all,
 	;; and others will look like they're working but fail unpredictably.
 	;; NOTE: that's specific to the 16f62[78] series; dunno about others.
+;;; banksel TRIS... ?
 ;;;  	bsf	USART_RX_TRIS
 ;;; 	bsf	USART_TX_TRIS
 	
@@ -85,6 +84,7 @@ init_serial:
 	;;    38400: 3.07 (tried 3; not stable)
 	;;    57600: 1.7126 (not tested, seems unlikely to work)
 
+	banksel	TXSTA
 #if USART_HIGHSPEED
 	bsf	TXSTA, BRGH	; high-speed mode if 'bsf'; low-speed for 'bcf'
 #else

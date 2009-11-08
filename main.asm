@@ -34,11 +34,14 @@ main:
 	movwf	ADCON1
 
 	banksel	TRISA
-	clrf	TRISA
+	movlw	b'00000000'	; all outputs
+	movwf	TRISA
 	banksel	TRISB
-	clrf	TRISB
+	movlw	b'00000000'	; all outputs
+	movwf	TRISB
 	banksel	TRISC
-	clrf	TRISC
+	movlw	b'11000000'	; RC7 is serial RX, RC6 is TX. Both must be set per pic16f870 docs, p. 63
+	movwf	TRISC
 	banksel	0
 
 	fcall	init_serial
@@ -46,7 +49,9 @@ main:
 	PUTCH_CSTR_INLINE putch_cstr_worker, msg_init
 
 loop:
-	goto loop
+	movlw	'a'
+	fcall	putch_usart
+	lgoto loop
 	
 
 	END
