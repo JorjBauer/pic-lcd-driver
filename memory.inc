@@ -1,13 +1,10 @@
-;;; general arguments (used for eeprom, must be globally addressable)
-#define arg1          0x70
-#define arg2          0x71
+	EXTERN	init_memory
+
+;;; main.asm
+#define main_serial_tmp 0x40
+#define main_lcd_mode 0x41
 
 ;;; lcd.asm
-#define lcd_tmr0 0x60
-#define lcd_tmr1 0x61
-#define lcd_pos 0x62
-#define lcd_tmp 0x63
-#define lcd_arg 0x64
 #define lcd_data0 0x50
 #define lcd_data1 0x51
 #define lcd_data2 0x52
@@ -24,6 +21,16 @@
 #define lcd_dataD 0x5d
 #define lcd_dataE 0x5e
 #define lcd_dataF 0x5f
+
+#define lcd_tmr0 0x60
+#define lcd_tmr1 0x61
+#define lcd_pos 0x62
+#define lcd_tmp 0x63
+#define lcd_arg 0x64
+
+;;; general arguments (used for eeprom, must be globally addressable)
+#define arg1          0x70
+#define arg2          0x71
 
 ;;; serial.asm
 #define serial_timeout_0 0xb0
