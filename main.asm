@@ -46,6 +46,8 @@ main:
 	movwf	TRISC
 	banksel	0
 
+	fcall	init_memory
+	
 	fcall	init_serial
 
 	PUTCH_CSTR_INLINE putch_cstr_worker, msg_init
@@ -53,10 +55,35 @@ main:
 	fcall	init_lcd
 	
 loop:
-;;; 	movlw	'a'
-;;; 	fcall	putch_usart
-	lgoto loop
+	;; wait for a char on the serial port
+	lcall	getch_usart
+	banksel	main_serial_tmp
+	movwf	main_serial_tmp
+
+	btfss	main_lcd_mode, 0 ; did we just receive an escape char?
+	goto	not_escape_mode
+is_escape_mode:
+	;; last received an escape character, so clear the escape mode, send
+	;; this character as a command to the LCD, and then loop.
+	bcf	main_lcd_mode, 0
+	movfw	main_serial_tmp
+	fcall	lcd_send_command
+	goto	loop
 	
+not_escape_mode:
+	;; If we receive an escape character, then set escape mode and loop.
+	sublw	0xFE
+	skpz
+	goto	not_escape_char
+is_escape_char:
+	bsf	main_lcd_mode, 0
+	goto	loop
+	
+not_escape_char:	
+	;; otherwise send it to the LCD display.
+	movfw	main_serial_tmp	
+	fcall	lcd_putch
+	goto loop
 
 	END
-	
+
