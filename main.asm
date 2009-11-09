@@ -10,7 +10,8 @@
 msg_init
 	da	"Initializing...\r\n"
 	dw	0x0000
-	
+
+.main code
 
 _ResetVector	set	0x00
 _InitVector	set	0x04
