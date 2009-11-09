@@ -6,7 +6,8 @@
 	include "piceeprom.inc"
 
 	GLOBAL	init_lcd
-	GLOBAL	lcd_write
+	GLOBAL	lcd_putch
+	GLOBAL	lcd_send_command
 
 PUTCH_LCD_INLINE	MACRO	SYMBOL, STRING_PTR
 	movlw	high(STRING_PTR)
@@ -130,28 +131,28 @@ init_lcd:
 	
 	;; RS=0; RW=0; DB[7..0] = 0011NFxx
 	movlw	b'00111000'	; 2 lines, 5x7 font
-	call	send_command
+	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 0 0 0 0 0 1 I/D S
 	movlw	b'00000110'	; auto-shift cursor, but not display
-	call	send_command
+	call	lcd_send_command
 	
 	;; RS=0; RW=0; DB[7..0] = 00001000 - disable display
 	;; NOTE: If I send 00001000 here, we never recover from that; there's
 	;; no way I've been able to (experimentally, with a 1x16 display)
 	;; get it to show anything. But if I send 00001111, it works.
 	movlw	b'00001111'
-	call	send_command
+	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 00000001 - enable display
 	movlw	b'00000001'
-	call	send_command
+	call	lcd_send_command
 
 	;; Initialization is complete
 #if 1
 	;; return home
 	movlw	b'00000010'
-	call	send_command
+	call	lcd_send_command
 #endif
 	
 	;; write an init message to the display
@@ -188,7 +189,7 @@ not_15:
 	movfw	lcd_pos
 	call	lookup
 	iorlw	b'10000000'
-	call	send_command
+	call	lcd_send_command
 	movfw	lcd_arg
 	call	lcd_write
 	movlw	lcd_data0
@@ -237,7 +238,7 @@ send_init:
 	TOGGLE_E
 	return
 
-send_command:
+lcd_send_command:
 	banksel	LCD_AUXPORT
 	bcf	LCD_RS
 	bcf	LCD_RW
@@ -281,15 +282,15 @@ putch_lcd_worker:
 
 set_shift:
 	movlw	b'00000111'
-	goto	send_command
+	goto	lcd_send_command
 clear_shift:
 	movlw	b'00000110'
-	goto	send_command
+	goto	lcd_send_command
 
 shift_buffer:
 	;; move to DD addr 0x00
 	movlw	b'10000000'
-	call	send_command
+	call	lcd_send_command
 
 	;; shift each byte of data down, and overwrite whatever was on the
 	;; display previously.
