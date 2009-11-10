@@ -82,7 +82,9 @@ is_escape_char:
 not_escape_char:	
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_tmp	
-	fcall	lcd_putch
+	lcall	lcd_putch
+	movfw	main_serial_tmp	;echo back down the line, too.
+	fcall	putch_usart
 	goto loop
 
 	END

@@ -72,7 +72,7 @@ TOGGLE_E	macro
 
 .string	code
 msg_lcd_init
-	da	"Initializing... "
+	da	"   LCD sled v0.1"
 	dw	0x0000
 	
 piclcd	code
@@ -101,7 +101,8 @@ init_lcd:
 	banksel	lcd_pos
 	clrf	lcd_pos
 
-	movlw	'-'
+	;; initialize ram to match the display
+	movlw	' '
 	movwf	lcd_data0
 	movwf	lcd_data1
 	movwf	lcd_data2
@@ -176,6 +177,12 @@ init_lcd:
 	
 	;; write an init message to the display
 
+	;; debug: do we need a delay here?
+	;; apparently, yes - w/o a delay, the init message is garbled. With it,
+	;; the init message appears to be okay.
+	movlw	5
+	call	lcd_delay
+
 	PUTCH_LCD_INLINE	putch_lcd_worker, msg_lcd_init
 	
 	return
@@ -245,6 +252,16 @@ bf_retry:
 	bcf	LCD_DATATRIS, 7
 	banksel	0
 
+#if 0
+	;; debugging -- seems to be req'd for proper text dumping @ startup.
+	;; but appears that we're okay during normal operation... ?
+	;; ... nope, all okay without this as long as we delay before printing
+	;; the init message.
+	movlw   1
+	goto    lcd_delay
+	;;  end debugging
+#endif	
+
 	return
 
 
@@ -258,6 +275,8 @@ send_init:
 	return
 
 lcd_send_command:
+	;; FIXME: need to alter lcd_pos appropriately
+	
 	banksel	LCD_AUXPORT
 	bcf	LCD_RS
 	bcf	LCD_RW
@@ -284,7 +303,7 @@ lcd_send_command:
 ;;; 15mS: W = 18
 ;;; 4.1mS: W = 5
 ;;; 100uS: W = 1 (really, 12-hundredths would be sufficient)
-x;;; 
+;;; 
 	
 lcd_delay:
 	banksel	lcd_tmr0
