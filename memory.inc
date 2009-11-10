@@ -27,6 +27,8 @@
 #define lcd_pos 0x62
 #define lcd_tmp 0x63
 #define lcd_arg 0x64
+#define lcd_shift_tmp 0x65
+#define lcd_shift_tmp2 0x66
 
 ;;; general arguments (used for eeprom, must be globally addressable)
 #define arg1          0x70

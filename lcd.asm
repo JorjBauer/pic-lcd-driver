@@ -2,7 +2,6 @@
 	include "memory.inc"
 	include "pins.inc"
 	include "common.inc"
-	include "serial.inc" 	; for debugging
 	include "piceeprom.inc"
 
 	GLOBAL	init_lcd
@@ -73,7 +72,7 @@ TOGGLE_E	macro
 
 .string	code
 msg_lcd_init
-	da	"Jakob Talbutt-Bauer"
+	da	"Initializing... "
 	dw	0x0000
 	
 piclcd	code
@@ -96,10 +95,30 @@ lookup:
 	retlw	0x45
 	retlw	0x46
 	retlw	0x47
+	retlw	0x47		;extra to catch lcd-display-overflow...
 	
 init_lcd:
 	banksel	lcd_pos
 	clrf	lcd_pos
+
+	movlw	'-'
+	movwf	lcd_data0
+	movwf	lcd_data1
+	movwf	lcd_data2
+	movwf	lcd_data3
+	movwf	lcd_data4
+	movwf	lcd_data5
+	movwf	lcd_data6
+	movwf	lcd_data7
+	movwf	lcd_data8
+	movwf	lcd_data9
+	movwf	lcd_dataA
+	movwf	lcd_dataB
+	movwf	lcd_dataC
+	movwf	lcd_dataD
+	movwf	lcd_dataE
+	movwf	lcd_dataF
+	
 	banksel	LCD_DATATRIS
 	movlw	0x00		; all outputs ('on' == 'in'; 'off' == 'out')
 	movwf	LCD_DATATRIS
@@ -175,16 +194,22 @@ lcd_putch:
 	movwf	lcd_arg		; save it for later
 
 	movfw	lcd_pos
-	sublw	d'15'
+	sublw	d'16'
 	skpz
-	goto	not_15
-is_15:
+	goto	not_16
+is_16:
 	call	shift_buffer	; shift our buffered data left 1 char & reprint
+
 	movfw	lcd_arg		; take what's in lcd_arg and print it too
 	movwf	lcd_dataF
-	goto	lcd_write
 	
-not_15:	
+	;; write it to the last position on the display
+	movfw	lcd_arg
+	call	lcd_write
+
+	return
+	
+not_16:	
 	;; put new char @ DD[lookup[pos]]
 	movfw	lcd_pos
 	call	lookup
@@ -197,8 +222,9 @@ not_15:
 	movwf	FSR
 	movfw	lcd_arg
 	movwf	INDF
+
 	incf	lcd_pos, F
-	
+
 	return
 	
 wait_bf:
@@ -219,13 +245,6 @@ bf_retry:
 	bcf	LCD_DATATRIS, 7
 	banksel	0
 
-#if 0
-	;; debugging
-	movlw	3
-	goto	lcd_delay
-	;; end debugging
-#endif
-	
 	return
 
 
@@ -292,67 +311,36 @@ shift_buffer:
 	movlw	b'10000000'
 	call	lcd_send_command
 
-	;; shift each byte of data down, and overwrite whatever was on the
-	;; display previously.
-	movfw	lcd_data1
-	movwf	lcd_data0
+	;; shift data left one byte, both on the display and in our ram cache
+	movlw	lcd_data1
+	movwf	FSR
+
+	clrf	lcd_shift_tmp	; new cursor position
+loop:	
+	movfw	INDF
+	decf	FSR, F
+	movwf	INDF
+	incf	FSR, F
+	incf	FSR, F
+	movwf	lcd_shift_tmp2	; save the char
+
+	;; move to the right spot on the LCD
+	movfw	lcd_shift_tmp
+	call	lookup
+	iorlw	b'10000000'
+	call	lcd_send_command
+	;; write the character now
+	movfw	lcd_shift_tmp2
 	call	lcd_write
 
-	movfw	lcd_data2
-	movwf	lcd_data1
-	call	lcd_write
+	;; increment the counter and loop as req'd
+	incf	lcd_shift_tmp, F
+	movfw	lcd_shift_tmp
+	sublw	0x0F		; if lcd_shift_tmp == 15, stop!
+	skpz
+	goto	loop
 
-	movfw	lcd_data3
-	movwf	lcd_data2
-	call	lcd_write
-
-	movfw	lcd_data4
-	movwf	lcd_data3
-	call	lcd_write
-
-	movfw	lcd_data5
-	movwf	lcd_data4
-	call	lcd_write
-
-	movfw	lcd_data6
-	movwf	lcd_data5
-	call	lcd_write
-
-	movfw	lcd_data7
-	movwf	lcd_data6
-	call	lcd_write
-
-	movfw	lcd_data8
-	movwf	lcd_data7
-	call	lcd_write
-
-	movfw	lcd_data9
-	movwf	lcd_data8
-	call	lcd_write
-
-	movfw	lcd_dataA
-	movwf	lcd_data9
-	call	lcd_write
-
-	movfw	lcd_dataB
-	movwf	lcd_dataA
-	call	lcd_write
-
-	movfw	lcd_dataC
-	movwf	lcd_dataB
-	call	lcd_write
-
-	movfw	lcd_dataD
-	movwf	lcd_dataC
-	call	lcd_write
-
-	movfw	lcd_dataE
-	movwf	lcd_dataD
-	call	lcd_write
-
-	movfw	lcd_dataF
-	movwf	lcd_dataE
-	goto	lcd_write
+	return
 	
 	END
 
