@@ -8,6 +8,7 @@
 	GLOBAL	lcd_putch
 	GLOBAL	lcd_send_command
 
+#if 0
 PUTCH_LCD_INLINE	MACRO	SYMBOL, STRING_PTR
 	movlw	high(STRING_PTR)
 	movwf	arg1
@@ -15,7 +16,7 @@ PUTCH_LCD_INLINE	MACRO	SYMBOL, STRING_PTR
 	movwf	arg2
 	fcall	SYMBOL
 	ENDM
-	
+
 PUTCH_LCD_INLINEWKR	MACRO
 	LOCAL	read_next
 	LOCAL	not_increment
@@ -62,14 +63,8 @@ not_increment:
 	fcall   lcd_putch
 	goto    read_next
 	ENDM
+#endif
 	
-TOGGLE_E	macro
-	banksel	LCD_AUXPORT
-	bsf	LCD_E		; minimum 450nS hold time...
-	nop
-	bcf	LCD_E
-	ENDM
-
 .string	code
 msg_lcd_init
 	da	"   LCD sled v0.1"
@@ -119,15 +114,8 @@ init_lcd:
 	movwf	lcd_dataD
 	movwf	lcd_dataE
 	movwf	lcd_dataF
-	
-	banksel	LCD_DATATRIS
-	movlw	0x00		; all outputs ('on' == 'in'; 'off' == 'out')
-	movwf	LCD_DATATRIS
-	banksel	LCD_AUXTRIS
-	bcf	TRISC, 5	; FIXME: abstract into pins.inc
-	bcf	TRISC, 4
-	bcf	TRISC, 3
-	banksel	0
+
+	init_tris		; from pins.inc
 
 	;; lcd 8-bit initialization procedure, per HD44780 documentation
 	;; sleep ~15mS 
@@ -183,16 +171,14 @@ init_lcd:
 	movlw	5
 	call	lcd_delay
 
+#if 0
 	PUTCH_LCD_INLINE	putch_lcd_worker, msg_lcd_init
+#endif
 	
 	return
 
 lcd_write:
-	banksel	LCD_AUXPORT
-	bsf	LCD_RS
-	bcf	LCD_RW
-	banksel	LCD_DATAPORT
-	movwf	LCD_DATAPORT
+	WRITE_W_ON_LCD
 	TOGGLE_E
 	goto	wait_bf
 
@@ -235,16 +221,10 @@ not_16:
 	return
 	
 wait_bf:
-	banksel	LCD_AUXPORT
-	bcf	LCD_RS
-	bsf	LCD_RW
-	banksel	LCD_DATATRIS
-	bsf	LCD_DATATRIS, 7
-	banksel	LCD_DATAPORT
+	START_READ_BF
 bf_retry:	
 	TOGGLE_E
-	banksel	LCD_DATAPORT
-	btfss	LCD_DATAPORT, 7
+	READ_BF_AND_SKIP	; skip next statement if BF is set (busy)
 	goto	bf_retry
 	bcf	LCD_RW
 
@@ -315,9 +295,11 @@ lcd_delay:
 	goto    $-3
 	return
 
+#if 0
 putch_lcd_worker:
 	PUTCH_LCD_INLINEWKR	; has its own return, no none necessary
-
+#endif
+	
 set_shift:
 	movlw	b'00000111'
 	goto	lcd_send_command

@@ -5,7 +5,9 @@
 	EXTERN	getch_usart_timeout
 	EXTERN	putch_hex_usart
 	EXTERN	putch_BCD_usart
+#if 0
 	EXTERN	putch_cstr_worker
+#endif
 #endif
 
 #ifdef DISABLE_SERIAL
@@ -16,6 +18,7 @@
 #define SKIP_IF_SERIAL_DATA	btfss	PIR1, RCIF
 #endif
 
+#if 0
 ;;; putch_cstr_inlinewkr can be used to minimize the code size used by cstr
 ;;; inside of a module. Make sure there's one PUTCH_CSTR_INLINEWKR with a
 ;;; unique symbol name for that module, and then call PUTCH_CSTR_INLINE_DATA
@@ -159,4 +162,5 @@ string_data:
 done_macro:	
 	
 	ENDM
-	
+
+#endif

@@ -1,5 +1,5 @@
-        Processor       16f870
+        Processor       16f627a
         Radix           DEC
         EXPAND
 
-        include         "p16f870.inc"
+        include         "p16f627a.inc"

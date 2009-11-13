@@ -12,8 +12,9 @@
 	GLOBAL	getch_usart
 	GLOBAL	getch_usart_timeout
 	GLOBAL	init_serial
+#if 0
 	GLOBAL	putch_cstr_worker
-	
+#endif	
 
 PUTCH_USART_INLINE	MACRO
 	LOCAL	putch_block
@@ -296,10 +297,11 @@ overrun_timeout:
 	movfw	RCREG		; then re-enable CREN.
 	bsf	RCSTA, CREN
 	goto	getch_usart_timeout_loop	; retry
-
+#if 0
 putch_cstr_worker:
 	PUTCH_CSTR_INLINEWKR
 	;; no 'return' necessary; INLINEWKR ends with a 'goto'
+#endif
 	
 check_end_serial:
 	if ( ((_block_start & 0x1800) >> 11) != (($ & 0x1800) >> 11) )
