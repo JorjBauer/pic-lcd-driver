@@ -164,7 +164,11 @@ init_lcd:
 	
 	return
 
-lcd_write:
+;;; _lcd_write:
+;;;  Write a character to the LCD, bypassing internal buffering, scrolling
+;;;  and display tracking. This should only be used internally by this module.
+	
+_lcd_write:
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E
@@ -186,7 +190,7 @@ is_16:
 	
 	;; write it to the last position on the display
 	movfw	lcd_arg
-	call	lcd_write
+	call	_lcd_write
 
 	return
 	
@@ -197,7 +201,7 @@ not_16:
 	iorlw	b'10000000'
 	call	lcd_send_command
 	movfw	lcd_arg
-	call	lcd_write
+	call	_lcd_write
 	movlw	lcd_data0
 	addwf	lcd_pos, W
 	movwf	FSR
@@ -297,7 +301,7 @@ loop:
 	call	lcd_send_command
 	;; write the character now
 	movfw	lcd_shift_tmp2
-	call	lcd_write
+	call	_lcd_write
 
 	;; increment the counter and loop as req'd
 	incf	lcd_shift_tmp, F
