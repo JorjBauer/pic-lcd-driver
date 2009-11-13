@@ -73,21 +73,21 @@ init_lcd:
 	;; lcd 8-bit initialization procedure, per HD44780 documentation
 	;; sleep ~15mS 
 	movlw	18
-	call	lcd_delay
+	call	_lcd_delay
 	
 	;; RS=0; RW=0; DB[7..0] = 0011xxxx
 	movlw	b'00111000'
-	call	send_init
+	call	_send_init
 	;; sleep ~4.1mS
 	movlw	5
-	call	lcd_delay
+	call	_lcd_delay
 	
 	;; RS=0; RW=0; DB[7..0] = 0011xxxx
 	movlw	b'00111000'
-	call	send_init
+	call	_send_init
 	;; sleep ~100uS
 	movlw	1
-	call	lcd_delay
+	call	_lcd_delay
 
 	
 	;; RS=0; RW=0; DB[7..0] = 0011NFxx
@@ -126,7 +126,7 @@ init_lcd:
 	;; apparently, yes - w/o a delay, the init message is garbled. With it,
 	;; the init message appears to be okay.
 	movlw	5
-	call	lcd_delay
+	call	_lcd_delay
 #endif
 
 	movlw	' '
@@ -172,9 +172,13 @@ _lcd_write:
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E
-	goto	wait_bf
+	goto	_wait_bf
 
-;;; putch with internal buffering
+;;; lcd_putch:
+;;;  take character in 'W' and place it on the LCD. This includes shifting
+;;;  the existing text if required. (This should be the primary method used
+;;;  to put characters on the display, if the application isn't manually
+;;;  repositioning itself.)
 lcd_putch:
 	movwf	lcd_arg		; save it for later
 
@@ -183,7 +187,7 @@ lcd_putch:
 	skpz
 	goto	not_16
 is_16:
-	call	shift_buffer	; shift our buffered data left 1 char & reprint
+	call	_shift_buffer	; shift our buffered data left 1 char & reprint
 
 	movfw	lcd_arg		; take what's in lcd_arg and print it too
 	movwf	lcd_dataF
@@ -211,8 +215,13 @@ not_16:
 	incf	lcd_pos, F
 
 	return
-	
-wait_bf:
+
+;;; _wait_bf:
+;;;  wait until the "Busy Flag" is clear, meaning that the LCD is capable of
+;;;  taking its next command. It might make sense at some point to call this
+;;;  before we make our next call, rather than after we send this one, which
+;;;  would streamline commands a bit...
+_wait_bf:
 	START_READ_BF
 bf_retry:	
 	TOGGLE_E
@@ -225,20 +234,28 @@ bf_retry:
 
 	return
 
-
-send_init:
+;;; _send_init:
+;;;  Send an initialization command to the LCD (that is, same as any other
+;;;  command, but we won't wait for a busy flag check). Used during the
+;;;  initialization sequence.
+_send_init:
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E
 	return
 
+;;; lcd_send_command:
+;;;  used to send a command to the LCD. Should be used as the primary method
+;;;  to do that; this properly waits for the busy flag.
 lcd_send_command:
 	;; FIXME: need to alter lcd_pos appropriately
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E
-	goto	wait_bf
+	goto	_wait_bf
 
+;;; _lcd_delay:
+;;;  Delays for a specified number of loops, based on W:
 ;;; * W: number of cycles to run through this loop.
 ;;; * Clock is 3.5795 MHz, so each instruction is 4/3579500 seconds, so
 ;;; * setting W to 1 and calling this will delay 
@@ -259,7 +276,7 @@ lcd_send_command:
 ;;; 100uS: W = 1 (really, 12-hundredths would be sufficient)
 ;;; 
 	
-lcd_delay:
+_lcd_delay:
 	banksel	lcd_tmr0
 	movwf	lcd_tmr1
 	clrf	lcd_tmr0
@@ -269,14 +286,11 @@ lcd_delay:
 	goto    $-3
 	return
 
-set_shift:
-	movlw	b'00000111'
-	goto	lcd_send_command
-clear_shift:
-	movlw	b'00000110'
-	goto	lcd_send_command
-
-shift_buffer:
+;;; _shift_buffer:
+;;;  used to shift our internal memory buffer of what's on the display, and
+;;;  update the LCD display to show the characters that we think belong there.
+;;;  This is fairly specific to the 16166.
+_shift_buffer:
 	;; move to DD addr 0x00
 	movlw	b'10000000'
 	call	lcd_send_command
