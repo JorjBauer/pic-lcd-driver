@@ -51,9 +51,9 @@ init_serial:
 	;; get unpredictable results from it. Some PICs won't work at all,
 	;; and others will look like they're working but fail unpredictably.
 	;; NOTE: that's specific to the 16f62[78] series; dunno about others.
-;;; banksel TRIS... ?
-;;;  	bsf	USART_RX_TRIS
-;;; 	bsf	USART_TX_TRIS
+	banksel	USART_X_TRIS
+  	bsf	USART_RX_TRIS
+ 	bsf	USART_TX_TRIS
 	
 	;; high-speed port speed math:
 	;; Desired baud rate = Fosc / (16 * (X + 1))
