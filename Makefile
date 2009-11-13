@@ -22,4 +22,4 @@ disassemble: main.hex memory.hint
 	pic-disassemble -d -D 5 -a -s -I .string -S dummy:_\.org:check_start:check_end:^_ -i main.hex -m main.map -r memory.hint -g main.gif
 
 install: main.hex
-	picp /dev/tty.KeySerial1 16f870 -ef && picp /dev/tty.KeySerial1 16f870 -wc `./perl-flags-generator main.hex` -s -wp main.hex
+	picp /dev/tty.KeySerial1 16f627a -ef && picp /dev/tty.KeySerial1 16f627a -wc `./perl-flags-generator main.hex` -s -wp main.hex
