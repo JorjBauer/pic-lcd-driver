@@ -217,7 +217,7 @@ wait_bf:
 bf_retry:	
 	TOGGLE_E
 	
-	READ_BF_AND_SKIP	; skip next statement if BF is set (busy)
+	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
 	goto	bf_retry
 	bcf	LCD_RW
 
