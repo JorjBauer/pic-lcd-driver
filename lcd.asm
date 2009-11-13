@@ -8,68 +8,6 @@
 	GLOBAL	lcd_putch
 	GLOBAL	lcd_send_command
 
-#if 0
-PUTCH_LCD_INLINE	MACRO	SYMBOL, STRING_PTR
-	movlw	high(STRING_PTR)
-	movwf	arg1
-	movlw	low(STRING_PTR)
-	movwf	arg2
-	fcall	SYMBOL
-	ENDM
-
-PUTCH_LCD_INLINEWKR	MACRO
-	LOCAL	read_next
-	LOCAL	not_increment
-read_next:
-	banksel	0
-	fcall	fpm_read
-	banksel	arg2
-	incfsz	arg2, F
-	goto	not_increment
-	incf	arg1, F
-not_increment:
-	;; EEDATH and EEDATA have the data. BUT it's a packed string -
-	;; the program memory is only 14 bits wide. So we have to do some
-	;; work to extract it. And we can only access each register once,
-	;; at which point the PIC invalidates the value. So grab a temporary
-	;; copy of EEDATA, which we'll need to touch the high bit of...
-        banksel EEDATA
-	movfw   EEDATA
-	banksel serial_work_tmp
-	movwf   serial_work_tmp
-	
-	banksel EEDATH
-	movfw   EEDATH
-	banksel serial_work_tmp2
-	movwf   serial_work_tmp2
-	clc
-	banksel serial_work_tmp
-	btfsc   serial_work_tmp, 7
-	setc
-	banksel serial_work_tmp2
-	rlf     serial_work_tmp2, W
-	banksel 0
-	xorlw   0x00
-	skpnz
-	return
-	fcall   lcd_putch
-;;;  now repeat with the low 7 bits
-	banksel serial_work_tmp
-	movfw   serial_work_tmp
-	andlw   0x7F
-	banksel 0
-	skpnz
-	return
-	fcall   lcd_putch
-	goto    read_next
-	ENDM
-#endif
-	
-.string	code
-msg_lcd_init
-	da	"   LCD sled v0.1"
-	dw	0x0000
-	
 piclcd	code
 
 lookup:
@@ -171,9 +109,38 @@ init_lcd:
 	movlw	5
 	call	lcd_delay
 
-#if 0
-	PUTCH_LCD_INLINE	putch_lcd_worker, msg_lcd_init
-#endif
+	movlw	' '
+	lcall	lcd_putch
+	movlw	' '
+	lcall	lcd_putch
+	movlw	' '
+	lcall	lcd_putch
+	movlw	'L'
+	lcall	lcd_putch
+	movlw	'C'
+	lcall	lcd_putch
+	movlw	'D'
+	lcall	lcd_putch
+	movlw	' '
+	lcall	lcd_putch
+	movlw	'S'
+	lcall	lcd_putch
+	movlw	'l'
+	lcall	lcd_putch
+	movlw	'e'
+	lcall	lcd_putch
+	movlw	'd'
+	lcall	lcd_putch
+	movlw	' '
+	lcall	lcd_putch
+	movlw	'v'
+	lcall	lcd_putch
+	movlw	'0'
+	lcall	lcd_putch
+	movlw	'.'
+	lcall	lcd_putch
+	movlw	'1'
+	lcall	lcd_putch
 	
 	return
 
@@ -278,11 +245,6 @@ lcd_delay:
 	goto    $-3
 	return
 
-#if 0
-putch_lcd_worker:
-	PUTCH_LCD_INLINEWKR	; has its own return, no none necessary
-#endif
-	
 set_shift:
 	movlw	b'00000111'
 	goto	lcd_send_command
