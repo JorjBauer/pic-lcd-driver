@@ -21,13 +21,20 @@ MOVEBIT	macro	from, to, bitnum
 	bsf	to, bitnum
 	ENDM
 
-WRITE_W_ON_LCD	macro
-	movwf	lcd_write_tmp ; can't do bitwise work directly on W (grrr)
-
-	; set up RS and RW
+SET_RS_CLEAR_RW macro
         banksel PORTB
         bsf     LCD_RS
         bcf     LCD_RW
+	ENDM
+
+CLEAR_RS_AND_RW macro
+        banksel PORTB
+        bcf     LCD_RS
+        bcf     LCD_RW
+	ENDM
+
+WRITE_W_ON_LCD	macro
+	movwf	lcd_write_tmp ; can't do bitwise work directly on W (grrr)
 
 	;low nybble of W goes on A[0:3]; high nybble goes on B[4:7]. Note that 
 	;lcd_write_tmp must be in the same page as PORTA.
@@ -48,7 +55,8 @@ START_READ_BF	MACRO
         banksel PORTB
         bcf     LCD_RS
         bsf     LCD_RW
-        bsf     PORTB, 7
+	banksel	TRISB
+        bsf     TRISB, 7 ; now an input
 	ENDM
 
 ; skip the next statement if the busy flag is clear
@@ -56,6 +64,14 @@ READ_BF_AND_SKIP	MACRO
         banksel PORTB
         btfsc   PORTB, 7
 	ENDM
+
+RESET_BF	MACRO
+	banksel	TRISB
+	bcf	TRISB, 7 ; back as an output
+	banksel	0
+	ENDM
+
+
 
 init_tris MACRO
       ;set up data pins to LCD as outputs (cleared)

@@ -178,6 +178,7 @@ init_lcd:
 	return
 
 lcd_write:
+	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E
 	goto	wait_bf
@@ -224,44 +225,26 @@ wait_bf:
 	START_READ_BF
 bf_retry:	
 	TOGGLE_E
+	
 	READ_BF_AND_SKIP	; skip next statement if BF is set (busy)
 	goto	bf_retry
 	bcf	LCD_RW
 
-	banksel	LCD_DATATRIS
-	bcf	LCD_DATATRIS, 7
-	banksel	0
-
-#if 0
-	;; debugging -- seems to be req'd for proper text dumping @ startup.
-	;; but appears that we're okay during normal operation... ?
-	;; ... nope, all okay without this as long as we delay before printing
-	;; the init message.
-	movlw   1
-	goto    lcd_delay
-	;;  end debugging
-#endif	
+	RESET_BF
 
 	return
 
 
-send_init:	
-	banksel	LCD_AUXPORT
-	bcf	LCD_RS
-	bcf	LCD_RW
-	banksel	LCD_DATAPORT
-	movwf	LCD_DATAPORT
+send_init:
+	CLEAR_RS_AND_RW
+	WRITE_W_ON_LCD
 	TOGGLE_E
 	return
 
 lcd_send_command:
 	;; FIXME: need to alter lcd_pos appropriately
-	
-	banksel	LCD_AUXPORT
-	bcf	LCD_RS
-	bcf	LCD_RW
-	banksel	LCD_DATAPORT
-	movwf	LCD_DATAPORT
+	CLEAR_RS_AND_RW
+	WRITE_W_ON_LCD
 	TOGGLE_E
 	goto	wait_bf
 

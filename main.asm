@@ -4,7 +4,7 @@
 	include "serial.inc"
 	include "lcd.inc"
 
-	__CONFIG ( _CP_OFF & _DEBUG_OFF & _WRT_ENABLE_OFF & _CPD_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC )
+	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC )
 
 .string	code
 msg_init
@@ -28,12 +28,14 @@ Interrupt:
 	retfie
 
 main:
+#if 0
 	banksel	ADCON0
 	movlw	b'01100000'	; AN0 is analog, others digital. Powered off.
 	movwf	ADCON0
 	banksel	ADCON1
 	movlw	b'11001110'
 	movwf	ADCON1
+#endif
 
 	banksel	TRISA
 	movlw	b'00000000'	; all outputs
@@ -41,17 +43,21 @@ main:
 	banksel	TRISB
 	movlw	b'00000000'	; all outputs
 	movwf	TRISB
+#if 0
 	banksel	TRISC
 	movlw	b'11000000'	; RC7 is serial RX, RC6 is TX. Both must be set per pic16f870 docs, p. 63
 	movwf	TRISC
+#endif
 	banksel	0
 
 	fcall	init_memory
 	
 	fcall	init_serial
 
+#if 0
 	PUTCH_CSTR_INLINE putch_cstr_worker, msg_init
-
+#endif
+	
 	fcall	init_lcd
 	
 loop:
