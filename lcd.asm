@@ -10,6 +10,12 @@
 
 piclcd	code
 
+;;; simple lookup table: given a character position in W, return the LCD
+;;; display's character address for that position. This is written for the
+;;; 16166, which is a one-line 16-char display. It logically breaks up the
+;;; display into two "lines" (which happen to be side-by-side). Hence
+;;; the jump from 0x07 to 0x40...
+	
 lookup:
 	addwf	PCL, F
 	retlw	0x00
