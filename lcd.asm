@@ -35,12 +35,21 @@ lookup:
 	retlw	0x46
 	retlw	0x47
 	retlw	0x47		;extra to catch lcd-display-overflow...
+
+;;; init_lcd:
+;;;  Initializes the LCD, mostly per the documentation. Unfortunately the
+;;;  (printed) docs I've got appear to be wrong (or at least the procedure
+;;;  there doesn't work on the 16166 I've got). This procedure is a
+;;;  combination of what's in my printed docs as well as various information
+;;;  gleaned from the web and other peoples' initialization code. Time will
+;;;  tell how portable it is. So far, it has only been confirmed to work on
+;;;  a 16166.
 	
 init_lcd:
 	banksel	lcd_pos
 	clrf	lcd_pos
 
-	;; initialize ram to match the display
+	;; initialize ram to match the display (which is to say, blank)
 	movlw	' '
 	movwf	lcd_data0
 	movwf	lcd_data1
@@ -101,19 +110,24 @@ init_lcd:
 	call	lcd_send_command
 
 	;; Initialization is complete
-#if 1
+
 	;; return home
 	movlw	b'00000010'
 	call	lcd_send_command
-#endif
 	
 	;; write an init message to the display
 
+#if 0
+	;; I believe this delay requirement was due to a faulty
+	;; wait_bf, which has now been fixed. Needs to be confirmed or
+	;; disproven experimentally yet.
+	
 	;; debug: do we need a delay here?
 	;; apparently, yes - w/o a delay, the init message is garbled. With it,
 	;; the init message appears to be okay.
 	movlw	5
 	call	lcd_delay
+#endif
 
 	movlw	' '
 	lcall	lcd_putch
