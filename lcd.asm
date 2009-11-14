@@ -118,18 +118,6 @@ init_lcd:
 	
 	;; write an init message to the display
 
-#if 1
-	;; I believe this delay requirement was due to a faulty
-	;; wait_bf, which has now been fixed. Needs to be confirmed or
-	;; disproven experimentally yet.
-	
-	;; debug: do we need a delay here?
-	;; apparently, yes - w/o a delay, the init message is garbled. With it,
-	;; the init message appears to be okay.
-	movlw	5
-	call	_lcd_delay
-#endif
-
 	movlw	' '
 	lcall	lcd_putch
 	movlw	' '
