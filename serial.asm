@@ -44,7 +44,7 @@ serial	CODE
 check_start_serial:	
 	
 #define USART_HIGHSPEED 1
-#define USART_BAUD_INITIALIZER 0x16
+#define USART_BAUD_INITIALIZER 0x19
 	
 init_serial:
 	;; The USART requires that bits [21] of TRISB are enabled, or you'll

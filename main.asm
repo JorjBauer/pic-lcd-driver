@@ -4,7 +4,7 @@
 	include "serial.inc"
 	include "lcd.inc"
 
-	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC & _MCLRE_OFF )
+	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _INTOSC_OSC_NOCLKOUT & _MCLRE_OFF )
 
 .main code
 
@@ -32,6 +32,9 @@ main:
 	movwf	ADCON1
 #endif
 
+	banksel	PCON
+	bsf	PCON, OSCF	; high-speed (4MHz) internal oscillator mode
+	
 	banksel	OPTION_REG
 	bsf	OPTION_REG, 1	; disable port b pull-ups
 	banksel	CMCON
