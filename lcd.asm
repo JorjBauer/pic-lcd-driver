@@ -153,9 +153,14 @@ init_lcd:
 
 	;; delay to show startup banner, then clear display and let it run. If
 	;; we were allowing multiple serial configurations, this would be the
-	;; place to look for a 'reset the EEPROM' command...
+	;; place to look for a 'reset the EEPROM' command. This
+	;; is about a 1-second delay.
+	movlw	0x04
+	movwf	lcd_tmp
 	movlw	255
 	call	_lcd_delay
+	decfsz	lcd_tmp
+	goto	$-3
 	
 	;; clear, return home
 	movlw	b'00000001'
