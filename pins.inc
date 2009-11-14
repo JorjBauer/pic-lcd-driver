@@ -1,28 +1,29 @@
 #define LCD_DATAPORT PORTB
 #define LCD_DATATRIS TRISB
-#define LCD_E 	     PORTA,4
+#define LCD_E1 	     PORTA,6
+#define LCD_E2 	     PORTA,7
 #define LCD_RW 	     PORTB,0
 #define LCD_RS 	     PORTB,3
 
 ;a0-a3, b4-b7
 ;a4, b0, b3
 
-TOGGLE_E        macro
+TOGGLE_E1        macro
         banksel PORTA
-        bsf     LCD_E           ; minimum 450nS hold time...
+        bsf     LCD_E1           ; minimum 450nS hold time...
         nop
-        bcf     LCD_E
+        bcf     LCD_E1
         ENDM
 
-ASSERT_E	macro
+ASSERT_E1	macro
 	banksel	PORTA
-	bsf	LCD_E
+	bsf	LCD_E1
 	nop
 	ENDM
 
-DEASSERT_E	macro
+DEASSERT_E1	macro
 	banksel	PORTA
-	bcf	LCD_E
+	bcf	LCD_E1
 	ENDM
 
 MOVEBIT	macro	from, to, bitnum

@@ -160,7 +160,7 @@ init_lcd:
 _lcd_write:
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
-	TOGGLE_E
+	TOGGLE_E1
 	goto	_wait_bf
 
 ;;; lcd_putch:
@@ -213,11 +213,11 @@ not_16:
 _wait_bf:
 	START_READ_BF
 bf_retry:
-	ASSERT_E
+	ASSERT_E1
 
  	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
 	goto	bf_retry
-	DEASSERT_E
+	DEASSERT_E1
 	bcf	LCD_RW
 	
 	RESET_BF
@@ -231,7 +231,7 @@ bf_retry:
 _send_init:
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
-	TOGGLE_E
+	TOGGLE_E1
 	return
 
 ;;; lcd_send_command:
@@ -241,7 +241,7 @@ lcd_send_command:
 	;; FIXME: need to alter lcd_pos appropriately
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
-	TOGGLE_E
+	TOGGLE_E1
 	goto	_wait_bf
 
 ;;; _lcd_delay:
