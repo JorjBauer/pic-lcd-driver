@@ -1,5 +1,6 @@
 SCRIPT = /usr/local/share/gputils/lkr/16f627a.lkr
 OBJECTS = serial.o piceeprom.o lcd.o memory.o
+CFLAGS = -DSERIAL_ECHO
 
 all:main.hex
 

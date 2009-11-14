@@ -4,12 +4,7 @@
 	include "serial.inc"
 	include "lcd.inc"
 
-	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC )
-
-.string	code
-msg_init
-	da	"Initializing...\r\n"
-	dw	0x0000
+	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _HS_OSC & _MCLRE_OFF )
 
 .main code
 
@@ -37,26 +32,57 @@ main:
 	movwf	ADCON1
 #endif
 
+	banksel	OPTION_REG
+	bsf	OPTION_REG, 1	; disable port b pull-ups
+	banksel	CMCON
+        movlw   0x07		; disable all comparators
+	movwf	CMCON
+	
 	banksel	TRISA
-	movlw	b'00000000'	; all outputs
-	movwf	TRISA
-	banksel	TRISB
-	movlw	b'00000000'	; all outputs
-	movwf	TRISB
-#if 0
-	banksel	TRISC
-	movlw	b'11000000'	; RC7 is serial RX, RC6 is TX. Both must be set per pic16f870 docs, p. 63
-	movwf	TRISC
-#endif
+	clrf	TRISA		; all outputs (0s)
+	clrf	TRISB
 	banksel	0
 
 	fcall	init_memory
 	
 	fcall	init_serial
 
-#if 0
-	PUTCH_CSTR_INLINE putch_cstr_worker, msg_init
-#endif
+	movlw	'I'
+	fcall	putch_usart
+	movlw	'n'
+	fcall	putch_usart
+	movlw	'i'
+	fcall	putch_usart
+	movlw	't'
+	fcall	putch_usart
+	movlw	'i'
+	fcall	putch_usart
+	movlw	'a'
+	fcall	putch_usart
+	movlw	'l'
+	fcall	putch_usart
+	movlw	'i'
+	fcall	putch_usart
+	movlw	'z'
+	fcall	putch_usart
+	movlw	'i'
+	fcall	putch_usart
+	movlw	'n'
+	fcall	putch_usart
+	movlw	'g'
+	fcall	putch_usart
+	movlw	'.'
+	fcall	putch_usart
+	movlw	'.'
+	fcall	putch_usart
+	movlw	'.'
+	fcall	putch_usart
+	movlw	'.'
+	fcall	putch_usart
+	movlw	'\r'
+	fcall	putch_usart
+	movlw	'\n'
+	fcall	putch_usart
 	
 	fcall	init_lcd
 	
@@ -89,8 +115,6 @@ not_escape_char:
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_tmp	
 	lcall	lcd_putch
-	movfw	main_serial_tmp	;echo back down the line, too.
-	fcall	putch_usart
 	goto loop
 
 	END

@@ -14,6 +14,17 @@ TOGGLE_E        macro
         bcf     LCD_E
         ENDM
 
+ASSERT_E	macro
+	banksel	PORTA
+	bsf	LCD_E
+	nop
+	ENDM
+
+DEASSERT_E	macro
+	banksel	PORTA
+	bcf	LCD_E
+	ENDM
+
 MOVEBIT	macro	from, to, bitnum
 	btfss	from, bitnum
 	bcf	to, bitnum
@@ -33,12 +44,23 @@ CLEAR_RS_AND_RW macro
         bcf     LCD_RW
 	ENDM
 
+READ_W_FROM_LCD	macro
+	banksel	PORTA
+	movfw	PORTA
+	andlw	0x0F
+	movwf	lcd_write_tmp
+	movfw	PORTB
+	andlw	0xF0
+	iorwf	lcd_write_tmp, W
+	ENDM
+
 WRITE_W_ON_LCD	macro
+	banksel	PORTA
 	movwf	lcd_write_tmp ; can't do bitwise work directly on W (grrr)
 
 	;low nybble of W goes on A[0:3]; high nybble goes on B[4:7]. Note that 
 	;lcd_write_tmp must be in the same page as PORTA.
-	banksel	PORTA
+
 	MOVEBIT lcd_write_tmp, PORTA, 0
 	MOVEBIT lcd_write_tmp, PORTA, 1
 	MOVEBIT lcd_write_tmp, PORTA, 2
@@ -57,6 +79,13 @@ START_READ_BF	MACRO
         bsf     LCD_RW
 	banksel	TRISB
         bsf     TRISB, 7 ; now an input
+	bsf	TRISB, 6
+	bsf	TRISB, 5
+	bsf	TRISB, 4
+	bsf	TRISA, 3
+	bsf	TRISA, 2
+	bsf	TRISA, 1
+	bsf	TRISA, 0
 	ENDM
 
 ; skip the next statement if the busy flag is clear
@@ -68,6 +97,13 @@ READ_BF_AND_SKIP	MACRO
 RESET_BF	MACRO
 	banksel	TRISB
 	bcf	TRISB, 7 ; back as an output
+	bcf	TRISB, 6
+	bcf	TRISB, 5
+	bcf	TRISB, 4
+	bcf	TRISA, 3
+	bcf	TRISA, 2
+	bcf	TRISA, 1
+	bcf	TRISA, 0
 	banksel	0
 	ENDM
 

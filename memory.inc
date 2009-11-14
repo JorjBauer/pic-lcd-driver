@@ -41,4 +41,4 @@
 #define serial_timeout_2 0xb2
 #define serial_work_tmp  0xb3
 #define serial_work_tmp2 0xb4
-
+#define echo_buf 0xb5

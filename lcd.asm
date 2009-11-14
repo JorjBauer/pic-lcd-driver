@@ -3,7 +3,8 @@
 	include "pins.inc"
 	include "common.inc"
 	include "piceeprom.inc"
-
+	include "serial.inc"
+	
 	GLOBAL	init_lcd
 	GLOBAL	lcd_putch
 	GLOBAL	lcd_send_command
@@ -117,7 +118,7 @@ init_lcd:
 	
 	;; write an init message to the display
 
-#if 0
+#if 1
 	;; I believe this delay requirement was due to a faulty
 	;; wait_bf, which has now been fixed. Needs to be confirmed or
 	;; disproven experimentally yet.
@@ -223,13 +224,14 @@ not_16:
 ;;;  would streamline commands a bit...
 _wait_bf:
 	START_READ_BF
-bf_retry:	
-	TOGGLE_E
-	
-	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
-	goto	bf_retry
-	bcf	LCD_RW
+bf_retry:
+	ASSERT_E
 
+ 	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
+	goto	bf_retry
+	DEASSERT_E
+	bcf	LCD_RW
+	
 	RESET_BF
 
 	return
