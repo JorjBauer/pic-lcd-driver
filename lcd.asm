@@ -73,14 +73,14 @@ init_lcd:
 
 	;; lcd 8-bit initialization procedure, per HD44780 documentation
 	;; sleep ~15mS 
-	movlw	18
+	movlw	d'20'
 	call	_lcd_delay
 	
 	;; RS=0; RW=0; DB[7..0] = 0011xxxx
 	movlw	b'00111000'
 	call	_send_init
 	;; sleep ~4.1mS
-	movlw	5
+	movlw	d'6'
 	call	_lcd_delay
 	
 	;; RS=0; RW=0; DB[7..0] = 0011xxxx
@@ -150,6 +150,38 @@ init_lcd:
 	lcall	lcd_putch
 	movlw	'1'
 	lcall	lcd_putch
+
+	;; delay to show startup banner, then clear display and let it run. If
+	;; we were allowing multiple serial configurations, this would be the
+	;; place to look for a 'reset the EEPROM' command...
+	movlw	255
+	call	_lcd_delay
+	
+	;; clear, return home
+	movlw	b'00000001'
+	call	lcd_send_command
+	movlw	b'00000010'
+	call	lcd_send_command
+
+	;; reset display buffer
+	clrf	lcd_pos
+	movlw	' '
+	movwf	lcd_data0
+	movwf	lcd_data1
+	movwf	lcd_data2
+	movwf	lcd_data3
+	movwf	lcd_data4
+	movwf	lcd_data5
+	movwf	lcd_data6
+	movwf	lcd_data7
+	movwf	lcd_data8
+	movwf	lcd_data9
+	movwf	lcd_dataA
+	movwf	lcd_dataB
+	movwf	lcd_dataC
+	movwf	lcd_dataD
+	movwf	lcd_dataE
+	movwf	lcd_dataF
 	
 	return
 
@@ -247,7 +279,7 @@ lcd_send_command:
 ;;; _lcd_delay:
 ;;;  Delays for a specified number of loops, based on W:
 ;;; * W: number of cycles to run through this loop.
-;;; * Clock is 3.5795 MHz, so each instruction is 4/3579500 seconds, so
+;;; * Clock is 4 MHz, so each instruction is 4/4000000 seconds, so
 ;;; * setting W to 1 and calling this will delay 
 ;;; *
 ;;; * 3 cycles for set and call
@@ -259,11 +291,11 @@ lcd_send_command:
 ;;; * 2 cycles for return
 ;;; * == 5 + 767 * (W) + 4 cycles
 ;;;
-;;; which is ~.000867 seconds for each count of W.
+;;; which is ~.000776 seconds for each count of W.
 ;;;
-;;; 15mS: W = 18
-;;; 4.1mS: W = 5
-;;; 100uS: W = 1 (really, 12-hundredths would be sufficient)
+;;; 15mS: W = 20
+;;; 4.1mS: W = 6
+;;; 100uS: W = 1 (really, 13-hundredths would be sufficient)
 ;;; 
 	
 _lcd_delay:
