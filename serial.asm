@@ -213,6 +213,7 @@ putch_usart:
 ;;; ************************************************************************
 
 getch_usart:
+	banksel	RCSTA
  	btfsc	RCSTA, OERR	; check for overrun
  	goto	overrun
 
