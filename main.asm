@@ -4,7 +4,7 @@
 	include "serial.inc"
 	include "lcd.inc"
 
-	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _INTOSC_OSC_NOCLKOUT & _MCLRE_OFF )
+	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT & _MCLRE_OFF )
 
 .main code
 
