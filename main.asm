@@ -106,19 +106,39 @@ is_escape_mode:
 	goto	loop
 	
 not_escape_mode:
+	btfsc	main_lcd_mode, 1 ; are we in meta-escape mode?
+	goto	meta_escape_mode	
 	;; If we receive an escape character, then set escape mode and loop.
-	sublw	0xFE
+	xorlw	0xFE
 	skpz
 	goto	not_escape_char
 is_escape_char:
 	bsf	main_lcd_mode, 0
 	goto	loop
+
+is_meta_escape_char:
+	bsf	main_lcd_mode, 1
+	goto	loop
 	
-not_escape_char:	
+not_escape_char:
+	;; check for a meta-escape char (0x7C).
+	xorlw	0xFE ^ 0x7C
+	skpnz
+	goto	is_meta_escape_char
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_tmp	
-	lcall	lcd_putch
+	lcall	lcd_write
 	goto loop
+
+	;; meta-escape mode is 0x7C -- used to set properties of comms. Right
+	;; now that means selecting which 'E' driver to use in the LCD module.
+	;; In the future it might include setting a different serial speed.
+meta_escape_mode:
+	bcf	main_lcd_mode, 1 ;turn off meta-escape mode
+	movfw	main_serial_tmp
+	fcall	lcd_select
+	goto	loop
+	
 
 	END
 
