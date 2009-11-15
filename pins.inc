@@ -15,6 +15,13 @@ TOGGLE_E1        macro
         bcf     LCD_E1
         ENDM
 
+TOGGLE_E2        macro
+        banksel PORTA
+        bsf     LCD_E2           ; minimum 450nS hold time...
+        nop
+        bcf     LCD_E2
+        ENDM
+
 ASSERT_E1	macro
 	banksel	PORTA
 	bsf	LCD_E1
@@ -24,6 +31,17 @@ ASSERT_E1	macro
 DEASSERT_E1	macro
 	banksel	PORTA
 	bcf	LCD_E1
+	ENDM
+
+ASSERT_E2	macro
+	banksel	PORTA
+	bsf	LCD_E2
+	nop
+	ENDM
+
+DEASSERT_E2	macro
+	banksel	PORTA
+	bcf	LCD_E2
 	ENDM
 
 MOVEBIT	macro	from, to, bitnum

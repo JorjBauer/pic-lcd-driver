@@ -9,33 +9,19 @@
 	GLOBAL	lcd_putch
 	GLOBAL	lcd_send_command
 
+#define scroll_point 40
+	
 piclcd	code
 
-;;; simple lookup table: given a character position in W, return the LCD
-;;; display's character address for that position. This is written for the
-;;; 16166, which is a one-line 16-char display. It logically breaks up the
-;;; display into two "lines" (which happen to be side-by-side). Hence
-;;; the jump from 0x07 to 0x40...
+;;; For the 4x40 display, given a character position (linear, 0-159),
+;;; in W, return the character address for the position on the
+;;; display. Note that this conveniently ignores E1/E2.
 	
 lookup:
-	addwf	PCL, F
-	retlw	0x00
-	retlw	0x01
-	retlw	0x02
-	retlw	0x03
-	retlw	0x04
-	retlw	0x05
-	retlw	0x06
-	retlw	0x07
-	retlw	0x40
-	retlw	0x41
-	retlw	0x42
-	retlw	0x43
-	retlw	0x44
-	retlw	0x45
-	retlw	0x46
-	retlw	0x47
-	retlw	0x47		;extra to catch lcd-display-overflow...
+	;; conveniently, character 0 is at ram 0, and so on through 39.
+	;; after 39 we should subtract 40. After 79, we should subtract 80
+	;; (and it would be on E2).
+	return
 
 ;;; init_lcd:
 ;;;  Initializes the LCD, mostly per the documentation. Unfortunately the
@@ -49,25 +35,10 @@ lookup:
 init_lcd:
 	banksel	lcd_pos
 	clrf	lcd_pos
+	clrf	lcd_line
 
 	;; initialize ram to match the display (which is to say, blank)
-	movlw	' '
-	movwf	lcd_data0
-	movwf	lcd_data1
-	movwf	lcd_data2
-	movwf	lcd_data3
-	movwf	lcd_data4
-	movwf	lcd_data5
-	movwf	lcd_data6
-	movwf	lcd_data7
-	movwf	lcd_data8
-	movwf	lcd_data9
-	movwf	lcd_dataA
-	movwf	lcd_dataB
-	movwf	lcd_dataC
-	movwf	lcd_dataD
-	movwf	lcd_dataE
-	movwf	lcd_dataF
+	call	clear_shadow_ram
 
 	init_tris		; from pins.inc
 
@@ -92,10 +63,20 @@ init_lcd:
 
 	
 	;; RS=0; RW=0; DB[7..0] = 0011NFxx
+	bcf	lcd_selection, 0
+	movlw	b'00111000'	; 2 lines, 5x7 font
+	call	lcd_send_command
+	;; also initialize second driver chip
+	bsf	lcd_selection, 0
 	movlw	b'00111000'	; 2 lines, 5x7 font
 	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 0 0 0 0 0 1 I/D S
+	bcf	lcd_selection, 0
+	movlw	b'00000110'	; auto-shift cursor, but not display
+	call	lcd_send_command
+	;; also initialize second driver chip
+	bsf	lcd_selection, 0
 	movlw	b'00000110'	; auto-shift cursor, but not display
 	call	lcd_send_command
 	
@@ -103,18 +84,36 @@ init_lcd:
 	;; NOTE: If I send 00001000 here, we never recover from that; there's
 	;; no way I've been able to (experimentally, with a 1x16 display)
 	;; get it to show anything. But if I send 00001111, it works.
+	bcf	lcd_selection, 0
+	movlw	b'00001111'
+	call	lcd_send_command
+	;; also initialize second driver chip
+	bsf	lcd_selection, 0
 	movlw	b'00001111'
 	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 00000001 - enable display
+	bcf	lcd_selection, 0
+	movlw	b'00000001'
+	call	lcd_send_command
+	;; also initialize second driver chip
+	bsf	lcd_selection, 0
 	movlw	b'00000001'
 	call	lcd_send_command
 
 	;; Initialization is complete
 
 	;; return home
+	bcf	lcd_selection, 0
 	movlw	b'00000010'
 	call	lcd_send_command
+	;; also initialize second driver chip
+	bsf	lcd_selection, 0
+	movlw	b'00000010'
+	call	lcd_send_command
+
+	;; done init, stay on selected controller #0
+	bcf	lcd_selection, 0
 	
 	;; write an init message to the display
 
@@ -170,34 +169,24 @@ init_lcd:
 
 	;; reset display buffer
 	clrf	lcd_pos
-	movlw	' '
-	movwf	lcd_data0
-	movwf	lcd_data1
-	movwf	lcd_data2
-	movwf	lcd_data3
-	movwf	lcd_data4
-	movwf	lcd_data5
-	movwf	lcd_data6
-	movwf	lcd_data7
-	movwf	lcd_data8
-	movwf	lcd_data9
-	movwf	lcd_dataA
-	movwf	lcd_dataB
-	movwf	lcd_dataC
-	movwf	lcd_dataD
-	movwf	lcd_dataE
-	movwf	lcd_dataF
+	call	clear_shadow_ram
 	
 	return
 
-;;; _lcd_write:
+;;; lcd_write:
 ;;;  Write a character to the LCD, bypassing internal buffering, scrolling
-;;;  and display tracking. This should only be used internally by this module.
+;;;  and display tracking. This should only be used externally if lcd_putch
+;;; is not going to be used at all.
 	
-_lcd_write:
+lcd_write:
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
+	btfsc	lcd_selection, 0 ; skip if selection == 0
+	goto	write_e2
 	TOGGLE_E1
+	goto	_wait_bf
+write_e2:
+	TOGGLE_E2
 	goto	_wait_bf
 
 ;;; lcd_putch:
@@ -208,31 +197,39 @@ _lcd_write:
 lcd_putch:
 	movwf	lcd_arg		; save it for later
 
+	xorlw	10		; linefeed?
+	skpnz
+	goto	handle_linefeed
+	xorlw	10^13		; CR?
+	skpnz
+	goto	handle_cr
+	xorlw	13		; done messing around, then.
+
 	movfw	lcd_pos
-	sublw	d'16'
+	sublw	scroll_point
 	skpz
-	goto	not_16
-is_16:
+	goto	not_scroll
+is_scroll:
 	call	_shift_buffer	; shift our buffered data left 1 char & reprint
 
 	movfw	lcd_arg		; take what's in lcd_arg and print it too
-	movwf	lcd_dataF
+	movwf	lcd_datal0c0+scroll_point-1
 	
 	;; write it to the last position on the display
 	movfw	lcd_arg
-	call	_lcd_write
+	call	lcd_write
 
 	return
 	
-not_16:	
+not_scroll:	
 	;; put new char @ DD[lookup[pos]]
 	movfw	lcd_pos
 	call	lookup
 	iorlw	b'10000000'
 	call	lcd_send_command
 	movfw	lcd_arg
-	call	_lcd_write
-	movlw	lcd_data0
+	call	lcd_write
+	movlw	lcd_datal0c0
 	addwf	lcd_pos, W
 	movwf	FSR
 	movfw	lcd_arg
@@ -242,6 +239,26 @@ not_16:
 
 	return
 
+;;; lcd_select
+;;;   W: which line to select (0==E1, 1==E2)
+lcd_select:
+	movwf	lcd_selection
+	return
+	
+;;; handle_linefeed
+handle_linefeed:
+	incf	lcd_line, F
+	movfw	lcd_line
+	xorlw	4		; if we're on line 4 already (3), stay there
+	skpnz
+	decf	lcd_line, F
+	return
+	
+;;; handle_cr
+handle_cr:
+	clrf	lcd_pos		; move back to start of line
+	return
+	
 ;;; _wait_bf:
 ;;;  wait until the "Busy Flag" is clear, meaning that the LCD is capable of
 ;;;  taking its next command. It might make sense at some point to call this
@@ -250,11 +267,19 @@ not_16:
 _wait_bf:
 	START_READ_BF
 bf_retry:
+	btfsc	lcd_selection, 0 ; skip if selection == 0
+	goto	bf_try_e2
 	ASSERT_E1
+	goto	continue_bf
+bf_try_e2:
+	ASSERT_E2
+continue_bf:	
 
  	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
 	goto	bf_retry
+	;; no harm here de-asserting both...
 	DEASSERT_E1
+	DEASSERT_E2
 	bcf	LCD_RW
 	
 	RESET_BF
@@ -264,11 +289,13 @@ bf_retry:
 ;;; _send_init:
 ;;;  Send an initialization command to the LCD (that is, same as any other
 ;;;  command, but we won't wait for a busy flag check). Used during the
-;;;  initialization sequence.
+;;;  initialization sequence. Note that this initializes both E1 and E2
+;;;  simultaneously.
 _send_init:
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
 	TOGGLE_E1
+	TOGGLE_E2
 	return
 
 ;;; lcd_send_command:
@@ -278,7 +305,12 @@ lcd_send_command:
 	;; FIXME: need to alter lcd_pos appropriately
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
+	btfsc	lcd_selection, 0 ; skip if selection == 0
+	goto	send_to_e2
 	TOGGLE_E1
+	goto	_wait_bf
+send_to_e2:	
+	TOGGLE_E2
 	goto	_wait_bf
 
 ;;; _lcd_delay:
@@ -318,12 +350,19 @@ _lcd_delay:
 ;;;  update the LCD display to show the characters that we think belong there.
 ;;;  This is fairly specific to the 16166.
 _shift_buffer:
+	;; save current lcd selection
+	movfw	lcd_selection
+	movwf	lcd_selection_tmp
+
+	;; select device #0
+	clrf	lcd_selection
+	
 	;; move to DD addr 0x00
 	movlw	b'10000000'
 	call	lcd_send_command
 
 	;; shift data left one byte, both on the display and in our ram cache
-	movlw	lcd_data1
+	movlw	lcd_datal0c0+1
 	movwf	FSR
 
 	clrf	lcd_shift_tmp	; new cursor position
@@ -342,15 +381,93 @@ loop:
 	call	lcd_send_command
 	;; write the character now
 	movfw	lcd_shift_tmp2
-	call	_lcd_write
+	call	lcd_write
 
 	;; increment the counter and loop as req'd
 	incf	lcd_shift_tmp, F
 	movfw	lcd_shift_tmp
-	sublw	0x0F		; if lcd_shift_tmp == 15, stop!
+	xorlw	scroll_point - 1 ; if we're at the end of the line, stop!
 	skpz
 	goto	loop
 
+	;; restore current line selection
+	;; save current lcd selection
+	movfw	lcd_selection_tmp
+	movwf	lcd_selection
+	
+	return
+
+clear_shadow_ram:
+	;; clear page0 and page1 of shadow ram (bytes 0x20 through 0x6F and
+	;; bytes 0xa0 through 0xef) with spaces, which matches what the display
+	;; would be displaying.
+	movlw	lcd_datal0c0
+	movwf	FSR
+repeat_pg0:	
+	movlw	' '
+	movwf	INDF
+	incf	FSR, F
+	movlw	lcd_datal1c39
+	xorwf	FSR, W
+	skpz
+	goto	repeat_pg0
+
+	movlw	lcd_datal2c0
+	movwf	FSR
+repeat_pg1:
+	movlw	' '
+	movwf	INDF
+	incf	FSR, F
+	movlw	lcd_datal3c39
+	xorwf	FSR, W
+	skpz
+	goto	repeat_pg1
+	return
+
+;;; dump_mem exists for debugging purposes
+dump_mem:
+	movlw	lcd_datal0c0
+	movwf	FSR
+	movlw	'\r'
+	fcall	putch_usart
+	movlw	'\n'
+	fcall	putch_usart
+
+	movlw	'0'
+	fcall	putch_usart
+	movlw	':'
+	fcall	putch_usart
+repeat_dump_l0:
+	movfw	INDF
+	fcall	putch_usart
+	incf	FSR, F
+	movlw	lcd_datal1c0
+	xorwf	FSR, W
+	skpz
+	goto	repeat_dump_l0
+
+	movlw	'\r'
+	fcall	putch_usart
+	movlw	'\n'
+	fcall	putch_usart
+	movlw	'1'
+	fcall	putch_usart
+	movlw	':'
+	fcall	putch_usart
+repeat_dump_l1:
+	movfw	INDF
+	fcall	putch_usart
+	incf	FSR, F
+	movlw	lcd_datal1c39 + 1
+	xorwf	FSR, W
+	skpz
+	goto	repeat_dump_l1
+	
+
+	movlw	'\r'
+	fcall	putch_usart
+	movlw	'\n'
+	fcall	putch_usart
 	return
 	
 	END
