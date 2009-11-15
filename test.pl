@@ -57,10 +57,10 @@ do_sendmeta($port, 0x01); # move to second display
 do_sendcommand($port, 0x01); # clear
 do_sendcommand($port, 0x0C); # disable cursor
 
-my $line0 = ' / /*+  /*+  /* *** /*+ ***+ /*+ /*+ /*+';
-my $line1 = '/* % *   _% / * *+  *     /% $_% $+* * *';
-my $line2 = ' *  /%   -+ ***  $+ *$+  -*- /-+   * * *';
-my $line3 = ' * ***  $*%   * $*% $*%   *  $*% $*% $*%';
+my $line0 = ' / /*+ /*+  /* *** /*+ **+ /*+ /*+ /*+  ';
+my $line1 = '/* % *. _% / * *+  *    /% $_% $+* * *  ';
+my $line2 = ' *  /%. =+ ***  $+ *$+ =*= /=+   * * *  ';
+my $line3 = ' * *** $*%   * $*% $*%  *  $*% $*% $*%  ';
 
 my %map = ( ' ' => ' ',
             '/' => chr(0),
@@ -68,7 +68,8 @@ my %map = ( ' ' => ' ',
 	    '$' => chr(2),
 	    '%' => chr(3),
 	    '_' => chr(4),
-	    '-' => chr(5),
+	    '=' => chr(5),
+	    '.' => chr(6),
 	    '*' => chr(255) 
     );
 
@@ -79,12 +80,12 @@ do_sendmeta($port, 0x00);
 do_sendcommand($port, 0x80 + 0);
 foreach my $i (split(//, $line0)) {
     print "sending $i\n";
-    do_sendtext($port, $map{$i});
+    do_sendtext($port, $map{$i} || $i);
 }
 # line 2
 do_sendcommand($port, 0x80 + 40);
 foreach my $i (split(//, $line1)) {
-    do_sendtext($port, $map{$i});
+    do_sendtext($port, $map{$i} || $i);
 }
 
 # Second display
@@ -92,11 +93,11 @@ foreach my $i (split(//, $line1)) {
 do_sendmeta($port, 0x01);
 do_sendcommand($port, 0x80 + 0);
 foreach my $i (split(//, $line2)) {
-    do_sendtext($port, $map{$i});
+    do_sendtext($port, $map{$i} || $i);
 }
 do_sendcommand($port, 0x80 + 40);
 foreach my $i (split(//, $line3)) {
-    do_sendtext($port, $map{$i});
+    do_sendtext($port, $map{$i} || $i);
 }
 
 
@@ -115,6 +116,7 @@ sub init_custom_chars {
 		  3 => [ 0x1F, 0x1E, 0x1E, 0x1C, 0x1C, 0x18, 0x18, 0x10 ],
 		  4 => [ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0x1F ],
 		  5 => [ 0x1F, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 ],
+		  6 => [ 0x00, 0x00, 0x0E, 0x0E, 0x0E, 0x00, 0x00, 0x00 ],
 	);
 
     # Send custom characters to both display chips.
