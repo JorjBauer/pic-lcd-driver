@@ -7,6 +7,8 @@
 	
 	GLOBAL	init_lcd
 	GLOBAL	lcd_putch
+	GLOBAL	lcd_write
+	GLOBAL	lcd_select
 	GLOBAL	lcd_send_command
 
 #define scroll_point 40
