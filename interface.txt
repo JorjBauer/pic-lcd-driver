@@ -1,0 +1,20 @@
+Character 0xFE is an escape character: the byte following it will be
+sent to the LCD controller(s) (as determined by E line selection).
+
+Character 0x7C is a second escape character (the "meta escape
+character"). Commands after this byte change the behavior of the
+sled's interface to the LCD. The command is a bitwise field, which
+controls the backlight state and which LCD controllers (E1/E2) are
+currently selected:
+
+  b'xxxLLE21'
+
+x: ignored
+LL:
+	0x ignored
+	10 turn off backlight
+	11 turn on backlight
+E21:	0xx ignored
+	101 use E1
+	110 use E2
+	111 use E1 and E2
