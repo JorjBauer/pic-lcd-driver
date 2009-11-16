@@ -10,8 +10,12 @@
 	GLOBAL	lcd_write
 	GLOBAL	lcd_select
 	GLOBAL	lcd_send_command
+	GLOBAL	lcd_set_backlight
 
 #define scroll_point 40
+
+#define LCD_E1_TEST lcd_selection, 0
+#define LCD_E2_TEST lcd_selection, 1
 	
 piclcd	code
 
@@ -63,22 +67,15 @@ init_lcd:
 	movlw	1
 	call	_lcd_delay
 
+	;; prepare to send all commands to both E lines
+	bsf	LCD_E1_TEST
+	bsf	LCD_E2_TEST
 	
 	;; RS=0; RW=0; DB[7..0] = 0011NFxx
-	bcf	lcd_selection, 0
-	movlw	b'00111000'	; 2 lines, 5x7 font
-	call	lcd_send_command
-	;; also initialize second driver chip
-	bsf	lcd_selection, 0
 	movlw	b'00111000'	; 2 lines, 5x7 font
 	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 0 0 0 0 0 1 I/D S
-	bcf	lcd_selection, 0
-	movlw	b'00000110'	; auto-shift cursor, but not display
-	call	lcd_send_command
-	;; also initialize second driver chip
-	bsf	lcd_selection, 0
 	movlw	b'00000110'	; auto-shift cursor, but not display
 	call	lcd_send_command
 	
@@ -86,39 +83,23 @@ init_lcd:
 	;; NOTE: If I send 00001000 here, we never recover from that; there's
 	;; no way I've been able to (experimentally, with a 1x16 display)
 	;; get it to show anything. But if I send 00001111, it works.
-	bcf	lcd_selection, 0
-	movlw	b'00001111'
-	call	lcd_send_command
-	;; also initialize second driver chip
-	bsf	lcd_selection, 0
 	movlw	b'00001111'
 	call	lcd_send_command
 
 	;; RS=0; RW=0; DB[7..0] = 00000001 - enable display
-	bcf	lcd_selection, 0
-	movlw	b'00000001'
-	call	lcd_send_command
-	;; also initialize second driver chip
-	bsf	lcd_selection, 0
 	movlw	b'00000001'
 	call	lcd_send_command
 
 	;; Initialization is complete
 
 	;; return home
-	bcf	lcd_selection, 0
-	movlw	b'00000010'
-	call	lcd_send_command
-	;; also initialize second driver chip
-	bsf	lcd_selection, 0
 	movlw	b'00000010'
 	call	lcd_send_command
 
-	;; done init, stay on selected controller #0
-	bcf	lcd_selection, 0
+	;; done init; reset the selected controller to be E1-only
+	bcf	LCD_E2_TEST
 	
 	;; write an init message to the display
-
 	movlw	' '
 	lcall	lcd_putch
 	movlw	' '
@@ -181,15 +162,19 @@ init_lcd:
 ;;; is not going to be used at all.
 	
 lcd_write:
+	movwf	lcd_tmp
+	call	_wait_bf
+	movfw	lcd_tmp
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
-	btfsc	lcd_selection, 0 ; skip if selection == 0
-	goto	write_e2
+	btfss	LCD_E1_TEST
+	goto	skip_write_e1
 	TOGGLE_E1
-	goto	_wait_bf
-write_e2:
+skip_write_e1:
+	btfss	LCD_E2_TEST
+	return
 	TOGGLE_E2
-	goto	_wait_bf
+	return
 
 ;;; lcd_putch:
 ;;;  take character in 'W' and place it on the LCD. This includes shifting
@@ -242,9 +227,16 @@ not_scroll:
 	return
 
 ;;; lcd_select
-;;;   W: which line to select (0==E1, 1==E2)
+;;;   W: which device E lines to use. This is a bitwise test:
+;;;   b'xxxxxx21' -- if '1' is on, use E1; if '2' is on, use E2. Note that
+;;;   one of these bits must be set, or this module's code may do bad things
+;;;   while waiting for the BF flag after sending commands...
 lcd_select:
 	movwf	lcd_selection
+	btfsc	LCD_E1_TEST
+	return			; bit1 is set, so we don't need failsafe...
+	btfss	LCD_E2_TEST
+	bsf	LCD_E1_TEST	; failsafe: no bits were on. turn on E1
 	return
 	
 ;;; handle_linefeed
@@ -265,23 +257,29 @@ handle_cr:
 ;;;  wait until the "Busy Flag" is clear, meaning that the LCD is capable of
 ;;;  taking its next command. It might make sense at some point to call this
 ;;;  before we make our next call, rather than after we send this one, which
-;;;  would streamline commands a bit...
+;;;  would streamline commands a bit.
+;;; Note that this will wait for both E1 and E2 to be clear, if both are
+;;; selected.
 _wait_bf:
 	START_READ_BF
-bf_retry:
-	btfsc	lcd_selection, 0 ; skip if selection == 0
-	goto	bf_try_e2
+	btfss	LCD_E1_TEST
+	goto	dont_bf_test_e1
+bf_retry_e1:
 	ASSERT_E1
-	goto	continue_bf
-bf_try_e2:
-	ASSERT_E2
-continue_bf:	
-
  	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
-	goto	bf_retry
-	;; no harm here de-asserting both...
+	goto	bf_retry_e1
 	DEASSERT_E1
+
+dont_bf_test_e1:	
+	btfss	LCD_E2_TEST
+	goto	dont_bf_test_e2
+bf_retry_e2:
+	ASSERT_E2
+	READ_BF_AND_SKIP
+	goto	bf_retry_e2
 	DEASSERT_E2
+
+dont_bf_test_e2:
 	bcf	LCD_RW
 	
 	RESET_BF
@@ -304,16 +302,22 @@ _send_init:
 ;;;  used to send a command to the LCD. Should be used as the primary method
 ;;;  to do that; this properly waits for the busy flag.
 lcd_send_command:
-	;; FIXME: need to alter lcd_pos appropriately
+	movwf	lcd_tmp
+	call	_wait_bf
+	movfw	lcd_tmp
+	
+	;; FIXME: need to alter lcd_pos appropriately?
+	
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
-	btfsc	lcd_selection, 0 ; skip if selection == 0
+	btfss	LCD_E1_TEST
 	goto	send_to_e2
 	TOGGLE_E1
-	goto	_wait_bf
-send_to_e2:	
+send_to_e2:
+	btfss	LCD_E2_TEST
+	return
 	TOGGLE_E2
-	goto	_wait_bf
+	return
 
 ;;; _lcd_delay:
 ;;;  Delays for a specified number of loops, based on W:
@@ -357,7 +361,8 @@ _shift_buffer:
 	movwf	lcd_selection_tmp
 
 	;; select device #0
-	clrf	lcd_selection
+	movlw	0x01
+	movwf	lcd_selection
 	
 	;; move to DD addr 0x00
 	movlw	b'10000000'
@@ -470,6 +475,15 @@ repeat_dump_l1:
 	fcall	putch_usart
 	movlw	'\n'
 	fcall	putch_usart
+	return
+
+;;; W, bit 0, determines on/off.
+lcd_set_backlight:
+	movwf	lcd_tmp
+	btfss	lcd_tmp, 0
+	bcf	PORTA, 4
+	btfsc	lcd_tmp, 0
+	bsf	PORTA, 4
 	return
 	
 	END
