@@ -131,14 +131,31 @@ not_escape_char:
 	goto loop
 
 	;; meta-escape mode is 0x7C -- used to set properties of comms. Right
-	;; now that means selecting which 'E' driver to use in the LCD module.
-	;; In the future it might include setting a different serial speed.
+	;; now that means selecting which 'E' driver to use in the LCD module
+	;; and setting the backlight on/off. In the future this might include
+	;; setting backlight brightness and baud rate of the serial interface.
 meta_escape_mode:
 	bcf	main_lcd_mode, 1 ;turn off meta-escape mode
-	movfw	main_serial_tmp
-	fcall	lcd_select
+	movwf	arg1
+	btfsc	arg1, 4
+	call	handle_backlight_meta
+	btfsc	arg1, 2
+	call	handle_select_meta
 	goto	loop
-	
+handle_backlight_meta:
+	;; bit 3 determines LCD on/off. Send 0/1 in W based on that bit.
+	btfss	arg1, 3
+	movlw	0x01
+	btfsc	arg1, 3
+	movlw	0x00
+	fcall	lcd_set_backlight
+	return
+handle_select_meta:
+	;; set the bits right for lcd_select...
+	movfw	arg1
+	andlw	0x03
+	fcall	lcd_select
+	return
 
 	END
 
