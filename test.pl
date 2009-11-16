@@ -5,6 +5,9 @@ use warnings;
 use Device::SerialPort;
 use Fcntl;
 use Carp;
+use POSIX;
+use Data::Dumper;
+use Time::Local;
 
 $|=1;
 
@@ -48,19 +51,62 @@ $port->purge_all();
 #   0x4x: set CG ram address
 #   0x8x: set DD ram address
 
+select_e1_and_e2($port);
 init_custom_chars($port);
+enable_backlight($port);
 
-do_sendmeta($port, 0x00); # move to first display
-do_sendcommand($port, 0x01); # clear
-do_sendcommand($port, 0x0C); # disable cursor
-do_sendmeta($port, 0x01); # move to second display
 do_sendcommand($port, 0x01); # clear
 do_sendcommand($port, 0x0C); # disable cursor
 
-my $line0 = ' / /*+ /*+  /* *** /*+ **+ /*+ /*+ /*+  ';
-my $line1 = '/* % *. _% / * *+  *    /% $_% $+* * *  ';
-my $line2 = ' *  /%. =+ ***  $+ *$+ =*= /=+   * * *  ';
-my $line3 = ' * *** $*%   * $*% $*%  *  $*% $*% $*%  ';
+my %numbers = ( 1 => ['  /',
+		      ' /*', 
+		      '  *',
+		      '  *'],
+		2 => ['/*+',
+		      '% *',
+		      ' /%',
+		      '***'],
+		3 => ['/*+',
+		      ' _%',
+		      ' =+',
+		      '$*%'],
+		4 => [' /*',
+		      '/%*',
+		      '***',
+		      '  *'],
+		5 => ['***',
+		      '*+ ',
+		      ' $+',
+		      '$*%'],
+		6 => ['/*+',
+		      '*  ',
+		      '*$+',
+		      '$*%'],
+		7 => ['**+',
+		      ' /%',
+		      '=*=',
+		      ' * '],
+		8 => ['/*+',
+		      '$_%',
+		      '/=+',
+		      '$*%'],
+		9 => ['/*+',
+		      '$+*',
+		      '  *',
+		      '$*%'],
+		0 => ['/*+',
+		      '* *',
+		      '* *',
+		      '$*%'],
+		':' => [' ',
+			'.',
+			'.',
+			' '],
+		' ' => [' ',
+			' ',
+			' ',
+			' '],
+    );
 
 my %map = ( ' ' => ' ',
             '/' => chr(0),
@@ -73,39 +119,108 @@ my %map = ( ' ' => ' ',
 	    '*' => chr(255) 
     );
 
-# First display
-# line 1
-print "sending $line0\n";
-do_sendmeta($port, 0x00);
-do_sendcommand($port, 0x80 + 0);
-foreach my $i (split(//, $line0)) {
-    print "sending $i\n";
-    do_sendtext($port, $map{$i} || $i);
-}
-# line 2
-do_sendcommand($port, 0x80 + 40);
-foreach my $i (split(//, $line1)) {
-    do_sendtext($port, $map{$i} || $i);
-}
+print_time($port, "1234");
 
-# Second display
-# line 3
-do_sendmeta($port, 0x01);
-do_sendcommand($port, 0x80 + 0);
-foreach my $i (split(//, $line2)) {
-    do_sendtext($port, $map{$i} || $i);
+while (1) {
+    my $now = POSIX::strftime("%H%M", localtime);
+    print_time($port, $now);
+    print_days_till_xmas($port);
+    sleep(1);
 }
-do_sendcommand($port, 0x80 + 40);
-foreach my $i (split(//, $line3)) {
-    do_sendtext($port, $map{$i} || $i);
-}
-
 
 sleep(1);
 $port->close();
 undef $port;
 
 exit 0;
+
+sub print_days_till_xmas {
+    my ($port) = @_;
+    my @time = localtime;
+    $time[4]++;
+    my $christmas = timelocal(0,0,0,25,11,$time[5]);
+    $time[5]+=1900;
+    my $timeleft = $christmas - time();
+    my $minsleft = int($timeleft / 60);
+    my $hoursleft = int($minsleft / 60);
+    my $daysleft = int($hoursleft / 24) + 1;
+
+    do_goto($port, 24, 2);
+    do_sendtext($port, "$daysleft day");
+    do_sendtext($port, "s") if ($daysleft != 0);
+    do_sendtext($port, " until");
+    do_goto($port, 26, 3);
+    do_sendtext($port, "Christmas ".$time[5]);
+}
+
+sub print_time {
+    my ($port, $time) = @_;
+
+    my $pos = 0;
+    foreach my $digit(split(//, $time)) {
+	foreach my $i (0..3) {
+	    print_line($port, $pos * 4, $i, $numbers{$digit}->[$i]);
+	}
+	$pos++;
+    }
+    # Print the colon...
+    foreach my $i (0..3) {
+	print_line($port, 7, $i, $numbers{':'}->[$i]);
+    }
+}
+
+sub do_goto {
+    my ($port, $x, $y) = @_;
+
+#    print "do_goto $x, $y\n";
+    if ($y >= 2) {
+#	print " selecting e2\n";
+	select_e2($port);
+    } else {
+#	print " selecting e1\n";
+	select_e1($port);
+    }
+
+#    print "Repositioning at ", $x + ($y%2)*0x40, "\n";
+    do_sendcommand($port, 0x80 + $x + ($y%2)*0x40);
+}
+
+sub print_line {
+    my ($port, $xpos, $linenum, $chars) = @_;
+
+#    print "print_line $xpos, $linenum, $chars\n";
+    do_goto($port, $xpos, $linenum);
+
+#    do_sendtext($port, $chars);
+    foreach my $i (split(//, $chars)) {
+	do_sendtext($port, $map{$i} || $i);
+    }
+}
+
+sub select_e1 {
+    my ($port) = @_;
+    do_sendmeta($port, 0x05); # binary 00000101
+}
+
+sub select_e2 {
+    my ($port) = @_;
+    do_sendmeta($port, 0x06); # binary 00000110
+}
+
+sub select_e1_and_e2 {
+    my ($port) = @_;
+    do_sendmeta($port, 0x07); # binary 00000111
+}
+
+sub enable_backlight {
+    my ($port) = @_;
+    do_sendmeta($port, 0x18); # enable backlight
+}
+
+sub disable_backlight {
+    my ($port) = @_;
+    do_sendmeta($port, 0x10); # disable backlight
+}
 
 sub init_custom_chars {
     my ($port) = @_;
@@ -119,30 +234,23 @@ sub init_custom_chars {
 		  6 => [ 0x00, 0x00, 0x0E, 0x0E, 0x0E, 0x00, 0x00, 0x00 ],
 	);
 
-    # Send custom characters to both display chips.
+    # Send custom characters to whatever display is currently selected.
 
     foreach my $charnum (keys %chars) {
 	my $counter = 0;
-	print "programming character $charnum\n";
+#	print "programming character $charnum\n";
 	my @data = @{$chars{$charnum}};
 	foreach my $i (@data) {
-	    do_sendmeta($port, 0x00); # move to first display
 	    # Select the DDram address to write to
-	    do_sendcommand($port, 0x40 + ($charnum << 3) + $counter);
-	    do_sendtext($port, chr($i));
-
-	    do_sendmeta($port, 0x01); # move to second display
 	    do_sendcommand($port, 0x40 + ($charnum << 3) + $counter);
 	    do_sendtext($port, chr($i));
 
 	    $counter++;
 	}
     }
-    print "done programming chars\n";
+#    print "done programming chars\n";
     # Move back to DD ram, pos 0...
-    do_sendmeta($port, 0x00);
     do_sendcommand($port, 0x80);
-    do_sendmeta($port, 0x01);
     do_sendcommand($port, 0x80);
 }
 
@@ -150,7 +258,7 @@ sub init_custom_chars {
 sub do_sendmeta {
     my ($p, $metacmd) = @_;
 
-    printf("sending meta-command 0x%X\n", $metacmd);
+#    printf("sending meta-command 0x%X\n", $metacmd);
     die "Failed to send meta-command"
 	unless ($p->write(chr(0x7C) . chr($metacmd)) == 2);
     die
@@ -160,7 +268,7 @@ sub do_sendmeta {
 sub do_sendcommand {
     my ($p, $command) = @_;
 
-    printf("sending command 0x%X\n", $command);
+#    printf("sending command 0x%X\n", $command);
 
     die "Failed to send command"
 	unless ($p->write(chr(254) . chr($command)) == 2);
@@ -171,7 +279,7 @@ sub do_sendcommand {
 sub do_sendtext {
     my ($p, $text) = @_;
 
-    printf("sending text '$text'\n");
+#    printf("sending text '%s'\n", $text);
     foreach my $i (1..length($text)) {
 	die "failed to send"
 	    unless ($p->write(substr($text, $i-1, 1)) == 1);
