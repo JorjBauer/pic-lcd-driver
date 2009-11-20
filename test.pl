@@ -11,8 +11,9 @@ use Time::Local;
 
 $|=1;
 
-my $dev = "/dev/tty.usbserial";
+#my $dev = "/dev/tty.usbserial";
 #my $dev = "/dev/tty.KeySerial1";
+my $dev = "/dev/tty.SocketCSA4156F7-SocketS";
 
 # Set up the serial port
 my $quiet = 1;
@@ -65,7 +66,7 @@ my %numbers = ( 1 => ['  /',
 		2 => ['/*+',
 		      '% *',
 		      ' /%',
-		      '***'],
+		      '/**'],
 		3 => ['/*+',
 		      ' _%',
 		      ' =+',
@@ -125,6 +126,7 @@ while (1) {
     my $now = POSIX::strftime("%H%M", localtime);
     print_time($port, $now);
     print_days_till_xmas($port);
+    print_blip($port);
     sleep(1);
 }
 
@@ -133,6 +135,20 @@ $port->close();
 undef $port;
 
 exit 0;
+
+my $blip = 0;
+sub print_blip {
+    my ($port) = @_;
+
+    do_goto($port, 39, 0);
+    $blip = $blip ^ 0x01;
+    if ($blip) {
+	do_sendtext($port, "+");
+    } else {
+	do_sendtext($port, " ");
+    }
+    
+}
 
 sub print_days_till_xmas {
     my ($port) = @_;
@@ -191,10 +207,10 @@ sub print_line {
 #    print "print_line $xpos, $linenum, $chars\n";
     do_goto($port, $xpos, $linenum);
 
-#    do_sendtext($port, $chars);
-    foreach my $i (split(//, $chars)) {
-	do_sendtext($port, $map{$i} || $i);
-    }
+    do_sendtext($port, join('', map { $map{$_} } split(//, $chars)));
+#    foreach my $i (split(//, $chars)) {
+#	do_sendtext($port, $map{$i} || $i);
+#    }
 }
 
 sub select_e1 {
@@ -280,9 +296,8 @@ sub do_sendtext {
     my ($p, $text) = @_;
 
 #    printf("sending text '%s'\n", $text);
+    $p->write($text);
     foreach my $i (1..length($text)) {
-	die "failed to send"
-	    unless ($p->write(substr($text, $i-1, 1)) == 1);
 	die "failed to read"
 	    unless (read_byte($p) eq substr($text, $i-1, 1));
     }
