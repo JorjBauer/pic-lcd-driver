@@ -19,6 +19,7 @@ my $dev = "/dev/tty.SocketCSA4156F7-SocketS";
 my $quiet = 1;
 my $port = Device::SerialPort->new($dev, $quiet, undef)
     || die "Unable to open serial port";
+print "Serial port opened.\n";
 $port->user_msg(1);
 $port->error_msg(1);
 $port->databits(8);
@@ -52,10 +53,12 @@ $port->purge_all();
 #   0x4x: set CG ram address
 #   0x8x: set DD ram address
 
+print "Initializing custom character set...\n";
 select_e1_and_e2($port);
 init_custom_chars($port);
 enable_backlight($port);
 
+print "Beginning command sequence...\n";
 do_sendcommand($port, 0x01); # clear
 do_sendcommand($port, 0x0C); # disable cursor
 
@@ -80,8 +83,8 @@ my %numbers = ( 1 => ['  /',
 		      ' $+',
 		      '$*%'],
 		6 => ['/*+',
-		      '*  ',
-		      '*$+',
+		      '*_ ',
+		      '* +',
 		      '$*%'],
 		7 => ['**+',
 		      ' /%',
@@ -92,8 +95,8 @@ my %numbers = ( 1 => ['  /',
 		      '/=+',
 		      '$*%'],
 		9 => ['/*+',
-		      '$+*',
-		      '  *',
+		      '$ *',
+		      ' =*',
 		      '$*%'],
 		0 => ['/*+',
 		      '* *',
@@ -277,7 +280,7 @@ sub do_sendmeta {
 #    printf("sending meta-command 0x%X\n", $metacmd);
     die "Failed to send meta-command"
 	unless ($p->write(chr(0x7C) . chr($metacmd)) == 2);
-    die
+    die "meta-command responded with incorrect data?"
 	unless (read_byte($p) eq chr(0x7C) && read_byte($p) eq chr($metacmd));
 }
 
