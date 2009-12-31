@@ -2,6 +2,10 @@ SCRIPT = /usr/local/share/gputils/lkr/16f627.lkr
 OBJECTS = serial.o piceeprom.o lcd.o memory.o
 CFLAGS = -DSERIAL_ECHO
 
+#SERIAL = /dev/tty.KeySerial1
+SERIAL = `ls /dev/tty.PL2303-*|head -1`
+
+
 all:main.hex
 
 main.hex: $(OBJECTS) main.o $(SCRIPT)
@@ -23,4 +27,4 @@ disassemble: main.hex memory.hint
 	pic-disassemble -d -D 5 -a -s -I .string -S dummy:_\.org:check_start:check_end:^_ -i main.hex -m main.map -r memory.hint -g main.gif
 
 install: main.hex
-	picp /dev/tty.KeySerial1 16f627 -ef && picp /dev/tty.KeySerial1 16f627 -wc `./perl-flags-generator main.hex` -s -wp main.hex
+	picp $(SERIAL) 16f627 -ef && picp $(SERIAL) 16f627 -wc `./perl-flags-generator main.hex` -s -wp main.hex
