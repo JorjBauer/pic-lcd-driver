@@ -42,9 +42,13 @@ serial	CODE
 	;; this code does not need to reside in page 0.
 	CONSTANT	_block_start = $
 check_start_serial:	
-	
-#define USART_HIGHSPEED 1
-#define USART_BAUD_INITIALIZER 0x19
+
+;;; 9600 baud
+ #define USART_HIGHSPEED 1
+ #define USART_BAUD_INITIALIZER 0x19
+;;; 1200 baud
+;;; #define USART_HIGHSPEED 0
+;;; #define USART_BAUD_INITIALIZER 0xC4
 	
 init_serial:
 	;; The USART requires that bits [21] of TRISB are enabled, or you'll
