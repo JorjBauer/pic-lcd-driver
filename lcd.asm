@@ -130,7 +130,7 @@ init_lcd:
 	lcall	lcd_putch
 	movlw	'.'
 	lcall	lcd_putch
-	movlw	'1'
+	movlw	'2'
 	lcall	lcd_putch
 
 	;; delay to show startup banner, then clear display and let it run. If
