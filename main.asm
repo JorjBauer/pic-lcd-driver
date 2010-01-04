@@ -20,6 +20,46 @@ _InitVector	set	0x04
 	nop
 	org	0x05
 Interrupt:
+;;; standard interrupt setup: save everything!
+	movwf   save_w
+	swapf   STATUS, W
+	movwf   save_status
+	bcf     STATUS, RP1
+	bcf     STATUS, RP0
+	movf    PCLATH, W
+	movwf   save_pclath
+	clrf    PCLATH
+	movfw   FSR
+	movwf   save_fsr
+
+;;; handle interrupt working here
+	;; RCIF is cleared automatically by hardware when we read RCREG.
+	;; grab the serial character into INDF
+	movfw	sbuf_wptr
+	movwf	FSR
+#if 1
+	fcall	getch_usart
+#else
+	movfw	RCREG
+#endif
+	movwf	INDF
+	incf	sbuf_size, F
+	incf	sbuf_wptr, F
+	movfw	sbuf_wptr
+	xorlw	end_serial_buffer+1
+	movlw	serial_buffer	; doesn't change Z
+	skpnz
+	movwf	sbuf_wptr
+	
+;;; clean up everything we saved...
+	movfw   save_fsr
+	movwf   FSR
+	movf    save_pclath, W
+	movwf   PCLATH
+	swapf   save_status, W
+	movwf   STATUS
+	swapf   save_w, F
+	swapf   save_w, W
 	retfie
 
 main:
@@ -90,29 +130,59 @@ main:
 	fcall	init_lcd
 
 	movlw	'!'		; preload the first character to echo back.
-	movwf	main_serial_tmp	; It's garbage, and can be ignored...
-loop:
+	movwf	main_serial_getch ; It's garbage, and can be ignored...
+
+	;; set up serial interrupt. All serial input goes back into our buffer,
+	;; which is then emptied in the main loop (below).
+	movlw	serial_buffer
+	movwf	sbuf_rptr
+	movwf	sbuf_wptr
+
+	banksel	PIE1
+	bsf	PIE1, RCIE
+	banksel	0
+	bsf	INTCON, PEIE
+	bsf	INTCON, GIE
+	
+main_loop:
 	;; echo back the previous character.
-	banksel main_serial_tmp
-	movfw   main_serial_tmp
+	movfw   main_serial_getch
 	banksel	0
         lcall   putch_usart
 	
 	;; wait for a char on the serial port. Save a copy of it, as we need
 	;; to echo it back again after we've performed the appropriate action.
-	lcall	getch_usart
-	banksel	main_serial_tmp
-	movwf	main_serial_tmp
+_ml_spin:	
+	movfw	sbuf_size
+	addlw	0		; shouldn't be necessary, since movf should update Z... ?
+	skpnz
+	goto	_ml_spin
 
+	;; pull a byte off of the queue...
+	movfw	sbuf_rptr
+	movwf	FSR
+	movfw	INDF
+	movwf	main_serial_getch	; save the character
+	decf	sbuf_size, F		; and decrease the num bytes in buffer
+	incf	sbuf_rptr, F		; move to next char in buffer
+	movfw	sbuf_rptr		; check: did we reach the end of buf?
+	xorlw	end_serial_buffer+1
+	movlw	serial_buffer	; doesn't affect Z
+	skpnz
+	movwf	sbuf_rptr	; yes, so roll around to start of buffer
+	movfw	main_serial_getch
+	;; end of pulling byte off of queue
+
+	;; W now contains the character read from serial
 	btfss	main_lcd_mode, 0 ; did we just receive an escape char?
 	goto	not_escape_mode
 is_escape_mode:
 	;; last received an escape character, so clear the escape mode, send
 	;; this character as a command to the LCD, and then loop.
 	bcf	main_lcd_mode, 0
-	movfw	main_serial_tmp
+	movfw	main_serial_getch
 	fcall	lcd_send_command
-	goto	loop
+	goto	main_loop
 	
 not_escape_mode:
 	btfsc	main_lcd_mode, 1 ; are we in meta-escape mode?
@@ -123,11 +193,11 @@ not_escape_mode:
 	goto	not_escape_char
 is_escape_char:
 	bsf	main_lcd_mode, 0
-	goto	loop
+	goto	main_loop
 
 is_meta_escape_char:
 	bsf	main_lcd_mode, 1
-	goto	loop
+	goto	main_loop
 	
 not_escape_char:
 	;; check for a meta-escape char (0x7C).
@@ -135,9 +205,9 @@ not_escape_char:
 	skpnz
 	goto	is_meta_escape_char
 	;; otherwise send it to the LCD display.
-	movfw	main_serial_tmp	
+	movfw	main_serial_getch
 	lcall	lcd_putch
-	goto loop
+	goto main_loop
 
 	;; meta-escape mode is 0x7C -- used to set properties of comms. Right
 	;; now that means selecting which 'E' driver to use in the LCD module
@@ -152,7 +222,7 @@ meta_escape_mode:
 	call	handle_select_meta
 	btfsc	arg1, 7
 	call	handle_debug_meta
-	goto	loop
+	goto	main_loop
 handle_backlight_meta:
 	;; bit 3 determines LCD on/off. Send 0/1 in W based on that bit.
 	btfss	arg1, 3
