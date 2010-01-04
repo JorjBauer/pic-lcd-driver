@@ -2,9 +2,12 @@
 	EXTERN	init_serial
 	EXTERN	putch_usart
 	EXTERN	getch_usart
+#if 0
+; disabled these three currently-unused code segments to reduce mem footprint
 	EXTERN	getch_usart_timeout
 	EXTERN	putch_hex_usart
 	EXTERN	putch_BCD_usart
+#endif
 #if 0
 	EXTERN	putch_cstr_worker
 #endif
@@ -164,3 +167,24 @@ done_macro:
 	ENDM
 
 #endif
+
+PUTCH_USART_INLINE      MACRO
+        LOCAL   putch_block
+        LOCAL   putch_doover
+putch_doover:   
+        ;; Check TRMT: is *everything* empty?
+        bsf     STATUS, RP0
+        pagesel putch_block
+putch_block:    
+        btfss   TXSTA, TRMT
+        goto    putch_block
+        bcf     STATUS, RP0
+        
+        ;; Check TXIF: is TXREG empty (but not necessarily TSR)?
+        btfss   PIR1, TXIF
+        goto    putch_doover
+
+        ;; All clear. Now transmit.
+                
+        movwf   TXREG
+        ENDM

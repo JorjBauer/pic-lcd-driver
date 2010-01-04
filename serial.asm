@@ -7,46 +7,29 @@
 	include "serial.inc"
 	
 	GLOBAL	putch_usart
+#if 0
 	GLOBAL	putch_hex_usart
 	GLOBAL	putch_BCD_usart
+#endif
 	GLOBAL	getch_usart
+#if 0
 	GLOBAL	getch_usart_timeout
+#endif
 	GLOBAL	init_serial
 #if 0
 	GLOBAL	putch_cstr_worker
 #endif	
 
-PUTCH_USART_INLINE	MACRO
-	LOCAL	putch_block
-	LOCAL	putch_doover
-putch_doover:	
-	;; Check TRMT: is *everything* empty?
-	bsf	STATUS, RP0
-	pagesel	putch_block
-putch_block:	
-	btfss	TXSTA, TRMT
-	goto	putch_block
-	bcf	STATUS, RP0
-	
-	;; Check TXIF: is TXREG empty (but not necessarily TSR)?
-	btfss	PIR1, TXIF
-	goto	putch_doover
-
-	;; All clear. Now transmit.
-		
-	movwf	TXREG
-	ENDM
-	
 serial	CODE
 
 	;; this code does not need to reside in page 0.
 	CONSTANT	_block_start = $
 check_start_serial:	
 
-;;; 9600 baud
+;;; 9600 baud, highspeed
  #define USART_HIGHSPEED 1
  #define USART_BAUD_INITIALIZER 0x19
-;;; 1200 baud
+;;; 1200 baud, lowspeed
 ;;; #define USART_HIGHSPEED 0
 ;;; #define USART_BAUD_INITIALIZER 0xC4
 	
@@ -119,6 +102,7 @@ init_serial:
 
 	return
 
+#if 0
 ;;; ************************************************************************
 ;;; * putch_hex_usart
 ;;; *
@@ -128,7 +112,6 @@ init_serial:
 ;;; *
 ;;; *   W	byte to send
 ;;; *
-;;; * FIXME: assumes 'byte' is in page 0, same as SERIALTX
 ;;; ************************************************************************
 
 putch_hex_usart:
@@ -139,15 +122,15 @@ putch_hex_usart:
 	andlw	0x0F		; grab low 4 bits of serial_work_tmp
 	sublw	0x09		; Is it > 9?
 	skpwgt			;   ... yes, so skip the next line
-	goto	send_under9	; If so, go to send_under9
+	goto	_send_under9	; If so, go to send_under9
 	sublw	0x09		; undo what we did
 	addlw	'A' - 10	; make it ascii
-	goto	send_hex
+	goto	_send_hex
 
-send_under9:
+_send_under9:
 	sublw	0x09		; undo what we did
 	addlw	'0'		; make it ascii
-send_hex:
+_send_hex:
 	PUTCH_USART_INLINE
 	
 	banksel	serial_work_tmp
@@ -156,12 +139,12 @@ send_hex:
 	andlw	0x0F
 	sublw	0x09
 	skpwgt
-	goto	send_under9_2
+	goto	_send_under9_2
 	sublw	0x09		; undo what we did
 	addlw	'A' - 10	; make it ascii
 	goto	putch_usart
 	
-send_under9_2:
+_send_under9_2:
 	sublw	0x09		; undo what we did
 	addlw	'0'		; make it ascii
 	goto	putch_usart
@@ -175,7 +158,6 @@ send_under9_2:
 ;;; *
 ;;; *   W	byte to send
 ;;; *
-;;; * FIXME: assumes 'byte' is in page 0, same as SERIALTX
 ;;; ************************************************************************
 
 putch_BCD_usart:
@@ -194,6 +176,7 @@ putch_BCD_usart:
 	andlw	0x0F
 	addlw	'0'
 	;; fall through to putch_usart
+#endif
 
 ;;; ************************************************************************
 ;;; * putch_usart
@@ -203,7 +186,6 @@ putch_BCD_usart:
 ;;; * Input:
 ;;; *    W	byte to send
 ;;; *
-;;; * FIXME: assumes 'byte' is in page 0, same as SERIALTX
 ;;; ************************************************************************
 putch_usart:
 	PUTCH_USART_INLINE
@@ -219,17 +201,17 @@ putch_usart:
 getch_usart:
 	banksel	RCSTA
  	btfsc	RCSTA, OERR	; check for overrun
- 	goto	overrun
+ 	goto	_ovrrun
 
 	btfss	PIR1, RCIF	; make sure there's data to receive
 	goto	getch_usart	; loop if not
 
-retry:	
+_retry:	
         movfw	RCREG		; grab the received character
 
 	;; check for framing errors
 	btfsc	RCSTA, FERR
-	goto	retry
+	goto	_retry
 	
 #ifdef SERIAL_ECHO
 	movwf	echo_buf	; save a copy
@@ -238,13 +220,14 @@ retry:
 #endif
 	return
 
-overrun	bcf	RCSTA, CREN	; Clear overrun. Documented procedure: clear
+_ovrrun	bcf	RCSTA, CREN	; Clear overrun. Documented procedure: clear
 	movfw	RCREG		; CREN, then flush the fifo by reading three
 	movfw	RCREG		; bytes (the size of the backing store), and
 	movfw	RCREG		; then re-enable CREN.
 	bsf	RCSTA, CREN
 	goto	getch_usart	; retry
-	
+
+#if 0
 ;;; ************************************************************************
 ;;; * getch_usart_timeout
 ;;; *
@@ -260,16 +243,16 @@ getch_usart_timeout:
 	clrf	serial_timeout_1
 	clrf	serial_timeout_2
 	banksel	0
-getch_usart_timeout_loop:
+_getch_usart_timeout_loop:
  	btfsc	RCSTA, OERR	; check for overrun
  	goto	overrun_timeout
 
 	;; increment timeout timer. If we roll over, we're done.
 	banksel	serial_timeout_0
 	incfsz	serial_timeout_0, F
-	goto	getch_usart_timeout_loop1
+	goto	_getch_usart_timeout_loop1
 	incfsz	serial_timeout_1, F
-	goto	getch_usart_timeout_loop1
+	goto	_getch_usart_timeout_loop1
 	incf	serial_timeout_2, F
 	movfw	serial_timeout_2
 	banksel	0
@@ -277,16 +260,16 @@ getch_usart_timeout_loop:
 	skpnz
 	retlw	0x00		; failed to rx in the allotted time
 	
-getch_usart_timeout_loop1:
+_getch_usart_timeout_loop1:
 	banksel	0
 	btfss	PIR1, RCIF	; make sure there's data to receive
-	goto	getch_usart_timeout_loop	; loop if not
+	goto	_getch_usart_timeout_loop	; loop if not
 
         movfw	RCREG		; grab the received character
 
 	;; check for framing errors
 	btfsc	RCSTA, FERR
-	goto	getch_usart_timeout_loop
+	goto	_getch_usart_timeout_loop
 	
 #ifdef SERIAL_ECHO
 	movwf	echo_buf	; save a copy
@@ -301,7 +284,9 @@ overrun_timeout:
 	movfw	RCREG		; bytes (the size of the backing store), and
 	movfw	RCREG		; then re-enable CREN.
 	bsf	RCSTA, CREN
-	goto	getch_usart_timeout_loop	; retry
+	goto	_getch_usart_timeout_loop	; retry
+#endif
+	
 #if 0
 putch_cstr_worker:
 	PUTCH_CSTR_INLINEWKR
