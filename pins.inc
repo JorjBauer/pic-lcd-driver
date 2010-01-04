@@ -51,6 +51,12 @@ MOVEBIT	macro	from, to, bitnum
 	bsf	to, bitnum
 	ENDM
 
+SET_RS_AND_RW macro
+	banksel	PORTB
+	bsf	LCD_RS
+	bsf	LCD_RW
+	ENDM
+
 SET_RS_CLEAR_RW macro
         banksel PORTB
         bsf     LCD_RS

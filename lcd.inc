@@ -12,4 +12,5 @@
 	EXTERN	lcd_send_command
 	EXTERN	putch_lcd_worker
 	EXTERN	lcd_set_backlight
+	EXTERN	lcd_debug
 

@@ -13,15 +13,14 @@
 
 #define lcd_tmr0 0x70
 #define lcd_tmr1 0x71
-#define lcd_pos 0x72
-#define lcd_line 0x73
+#define lcd_x 0x72
+#define lcd_y 0x73
 #define lcd_tmp 0x74
 #define lcd_arg 0x75
-#define lcd_shift_tmp 0x76
-#define lcd_shift_tmp2 0x77
+#define lcd_read_tmp1 0x76
+
 #define lcd_write_tmp 0x78
 #define lcd_selection 0x79
-#define lcd_selection_tmp 0x7A
 
 ;;; general arguments (used for eeprom, must be globally addressable)
 #define arg1          0x7B

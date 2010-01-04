@@ -6,28 +6,20 @@
 	include "serial.inc"
 	
 	GLOBAL	init_lcd
-	GLOBAL	lcd_putch
-	GLOBAL	lcd_write
+	GLOBAL	lcd_write	; raw action
+	GLOBAL	lcd_putch	; buffered action
 	GLOBAL	lcd_select
 	GLOBAL	lcd_send_command
 	GLOBAL	lcd_set_backlight
-
-#define scroll_point 40
+	GLOBAL	lcd_debug
+	
+#define line_width 40
+#define num_lines 4
 
 #define LCD_E1_TEST lcd_selection, 0
 #define LCD_E2_TEST lcd_selection, 1
 	
-piclcd	code
-
-;;; For the 4x40 display, given a character position (linear, 0-159),
-;;; in W, return the character address for the position on the
-;;; display. Note that this conveniently ignores E1/E2.
-	
-lookup:
-	;; conveniently, character 0 is at ram 0, and so on through 39.
-	;; after 39 we should subtract 40. After 79, we should subtract 80
-	;; (and it would be on E2).
-	return
+.piclcd	code
 
 ;;; init_lcd:
 ;;;  Initializes the LCD, mostly per the documentation. Unfortunately the
@@ -39,12 +31,9 @@ lookup:
 ;;;  a 16166.
 	
 init_lcd:
-	banksel	lcd_pos
-	clrf	lcd_pos
-	clrf	lcd_line
-
-	;; initialize ram to match the display (which is to say, blank)
-	call	clear_shadow_ram
+	banksel	lcd_x
+	clrf	lcd_x
+	clrf	lcd_y
 
 	init_tris		; from pins.inc
 
@@ -139,10 +128,11 @@ init_lcd:
 	;; is about a 1-second delay.
 	movlw	0x04
 	movwf	lcd_tmp
+_startup_delay:	
 	movlw	255
 	call	_lcd_delay
 	decfsz	lcd_tmp
-	goto	$-3
+	goto	_startup_delay
 	
 	;; clear, return home
 	movlw	b'00000001'
@@ -151,16 +141,15 @@ init_lcd:
 	call	lcd_send_command
 
 	;; reset display buffer
-	clrf	lcd_pos
-	call	clear_shadow_ram
+	clrf	lcd_x
 	
 	return
 
 ;;; lcd_write:
 ;;;  Write a character to the LCD, bypassing internal buffering, scrolling
-;;;  and display tracking. This should only be used externally if lcd_putch
-;;; is not going to be used at all.
-	
+;;;  and display tracking. Primarily for internal use, but it may also be
+;;;  useful to call this externally if lcd_putch is not going to be used
+;;;  at all (i.e. if scrolling and buffering are not desired).
 lcd_write:
 	movwf	lcd_tmp
 	call	_wait_bf
@@ -177,53 +166,65 @@ skip_write_e1:
 	return
 
 ;;; lcd_putch:
-;;;  take character in 'W' and place it on the LCD. This includes shifting
+;;;  take character in 'W' and place it on the LCD. This includes scrolling
 ;;;  the existing text if required. (This should be the primary method used
-;;;  to put characters on the display, if the application isn't manually
-;;;  repositioning itself.)
+;;;  to put characters on the display.)
 lcd_putch:
 	movwf	lcd_arg		; save it for later
 
+	xorlw	8		; backspace?
+	skpnz
+	goto	_handle_backspace
+	xorlw	8^255		; delete?
+	skpnz
+	goto	_handle_backspace
+	xorlw	255		; done messing around, then.
+
+	;; test for end-of-line before we print the character. (We do it here
+	;; so that we don't accidentally scroll off the last line.)
+	movfw	lcd_x
+	xorlw	line_width
+	skpz
+	goto	_not_eol
+_is_eol:
+	;; reached the end of a line. If it's the end of the last line, we'll
+	;; need to move to a new line. If we've moved from line 1 to 2, we'll
+	;; need to change from E1 to E2.
+	clrf	lcd_x
+	incf	lcd_y, F
+
+	movfw	lcd_y
+	xorlw	num_lines	; did we scroll off the screen?
+	skpnz
+	call	_scroll		; yes, so scroll display.
+
+	;; fall through and print the new character.
+	
+_not_eol:
+	movfw	lcd_arg		; get back the character being printed.
 	xorlw	10		; linefeed?
 	skpnz
-	goto	handle_linefeed
+	goto	_handle_linefeed
 	xorlw	10^13		; CR?
 	skpnz
-	goto	handle_cr
-	xorlw	13		; done messing around, then.
-
-	movfw	lcd_pos
-	sublw	scroll_point
-	skpz
-	goto	not_scroll
-is_scroll:
-	call	_shift_buffer	; shift our buffered data left 1 char & reprint
-
-	movfw	lcd_arg		; take what's in lcd_arg and print it too
-	movwf	lcd_datal0c0+scroll_point-1
+	goto	_handle_cr
 	
-	;; write it to the last position on the display
+	;; Put the character on the display in the current position, as well
+	;; as in our memory buffer.
+#if 1
+	;; debugging!
+	call	_position_cursor
+#endif	
 	movfw	lcd_arg
-	call	lcd_write
-
-	return
+	call	lcd_write	; write the char to the display.
+	movfw	lcd_arg
+	call	_store_byte	; store it in our memory buffer, too.
 	
-not_scroll:	
-	;; put new char @ DD[lookup[pos]]
-	movfw	lcd_pos
-	call	lookup
-	iorlw	b'10000000'
-	call	lcd_send_command
-	movfw	lcd_arg
-	call	lcd_write
-	movlw	lcd_datal0c0
-	addwf	lcd_pos, W
-	movwf	FSR
-	movfw	lcd_arg
-	movwf	INDF
-
-	incf	lcd_pos, F
-
+	;; Move to the next character on the line. We'll do end-of-line
+	;; wrapping when we receive the next character. (Or not, if we instead
+	;; get a reposition-cursor command before then.)
+	incf	lcd_x, F
+	
 	return
 
 ;;; lcd_select
@@ -240,17 +241,218 @@ lcd_select:
 	return
 	
 ;;; handle_linefeed
-handle_linefeed:
-	incf	lcd_line, F
-	movfw	lcd_line
-	xorlw	4		; if we're on line 4 already (3), stay there
-	skpnz
-	decf	lcd_line, F
-	return
+_handle_linefeed:
+	incf	lcd_y, F
+	movfw	lcd_y
+	xorlw	num_lines	; if we're on line 4 already (3), scroll.
+	skpz
+	goto	_hlf_noscroll
+	decf	lcd_y, F	; leave the cursor on line 3.
+	call	_scroll		; scroll contents up one line.
+_hlf_noscroll:
+	goto	_position_cursor
 	
 ;;; handle_cr
-handle_cr:
-	clrf	lcd_pos		; move back to start of line
+_handle_cr:
+	clrf	lcd_x		; move back to start of line.
+	goto	_position_cursor
+
+;;; handle_backspace
+_handle_backspace:
+	decf	lcd_x, F	; move back one character.
+	btfsc	STATUS, C
+	goto	_position_cursor
+	;; We rolled around to the line before. If we're on line 0, do nothing.
+	clrf	lcd_x		; move to X=0 no matter what
+	movfw	lcd_y
+	skpz
+	goto	_position_cursor ; on line 0 already! done.
+	decf	lcd_y, F	 ; else go back to line above.
+	goto	_position_cursor
+
+;;; _position_cursor
+;;;  enable the cursor on E1 or E2, and put it at the right x/y based on
+;;;  the current contents of lcd_x and lcd_y.
+_position_cursor:
+	;; For a two-display system, we need to disable the cursor on the
+	;; "wrong" display, enable it on the "right" display, and also set
+	;; the current input position on the "right" display.
+	;; (FIXME: should be able to tell whether or not we need to do that,
+	;;  rather than doing it every time!)
+	
+	btfsc	lcd_y, 1	; is it line 2 or 3?
+	movlw	0x01		; yes, select E1 (note, "wrong" display)
+	btfss	lcd_y, 1	;  no, select E2 (note, "wrong" display)
+	movlw	0x02
+	call	lcd_select
+
+	;; disable cursor on this one.
+	movlw	b'00001100'
+	call	lcd_send_command
+
+	btfsc	lcd_y, 1	; is it line 2 or 3?
+	movlw	0x02		; yes, select E2
+	btfss	lcd_y, 1	;  no, select E1
+	movlw	0x01
+	call	lcd_select
+
+	;; enable cursor on this one.
+	movlw	b'00001111'
+	call	lcd_send_command
+
+	;; now position the cursor on the given display.
+	;; figure out how much has to be added to X for desired posn
+	movfw	lcd_x		; start with X position
+	btfsc	lcd_y, 0	; if (lcd_y%2) == 0, add none
+	addlw	0x40		; ... else add 0x40
+	iorlw	0x80		; either way, set the high bit ("move cursor")
+	goto	lcd_send_command
+
+;;; _write_line
+;;;  write memory contents out to the line starting at offset given in W.
+_write_line:
+	movwf	lcd_read_tmp1
+
+	movlw	lcd_datal0c0
+	movwf	FSR
+
+	movfw	lcd_read_tmp1
+	addlw	0x80		; for "set ddram"
+	call	lcd_send_command ; set start position
+
+	movlw	line_width
+	movwf	lcd_read_tmp1
+_wl_loop:
+	movfw	INDF
+	call	lcd_write
+	incf	FSR, F
+	decfsz	lcd_read_tmp1, F
+	goto	_wl_loop
+	return
+
+_lcd_read_byte:
+	;; set TRIS appropriately for read
+	banksel   TRISA
+	bsf       TRISA, 0
+	bsf       TRISA, 1
+	bsf       TRISA, 2
+	bsf       TRISA, 3
+	banksel   TRISB
+	bsf       TRISB, 4
+	bsf       TRISB, 5
+	bsf       TRISB, 6
+	bsf       TRISB, 7
+	banksel	0
+
+	;; Set LCD for command mode
+	SET_RS_AND_RW
+
+	;; After taking E high, need to wait 160nS for the data read to
+	;; execute (if LCD has at least 4.5v; 360nS if lower than 4.5v). But
+	;; at 4MHz, one instruction cycle is 1000nS, so there are no delays
+	;; in this code.
+
+	;; Also note that this will have unexpected results if E1 and E2 are
+	;; both enabled...
+	
+	btfss	LCD_E1_TEST
+	goto	skip_read_e1
+        ASSERT_E1
+skip_read_e1:
+	btfss	LCD_E2_TEST
+	goto	skip_read_e2
+	ASSERT_E2
+skip_read_e2:
+	READ_W_FROM_LCD
+
+	DEASSERT_E1
+	DEASSERT_E2
+	
+	CLEAR_RS_AND_RW
+	
+	;; reset TRIS for normal operation
+	banksel   TRISA
+	bcf       TRISA, 0
+	bcf       TRISA, 1
+	bcf       TRISA, 2
+	bcf       TRISA, 3
+	banksel   TRISB
+	bcf       TRISB, 4
+	bcf       TRISB, 5
+	bcf       TRISB, 6
+	bcf       TRISB, 7
+	banksel	0
+	return
+	
+;;; _read_line
+;;;  read the DD ram on a line into ram. W is the memory offset.
+_read_line:
+	movwf	lcd_read_tmp1
+	
+	movlw	lcd_datal0c0	; prep FSR/INDF
+	movwf	FSR
+
+	movfw	lcd_read_tmp1
+	addlw	0x80		; 0x80 for "set ddram"
+	call	lcd_send_command ; set start position
+
+	movlw	line_width
+	movwf	lcd_read_tmp1
+	
+_rl1_loop:
+	call	_lcd_read_byte
+	movwf	INDF
+	incf	FSR, F
+	decfsz	lcd_read_tmp1, F
+	goto	_rl1_loop
+	return
+	
+;;; _scroll
+;;;  roll the lines of text on the screen up one line.
+_scroll:
+	;; Start by reading the <line_width> chars on line 1, and move them
+	;; to line 0. Repeat with line 2 (using E2) to line 1 (using E1),
+	;; then 3 (E2) to 2 (also E2).
+	movlw	0x01
+	call	lcd_select
+	movlw	0x40
+	call	_read_line	; read line 1 (0x40 on E1)
+	movlw	0x01
+	call	lcd_select
+	movlw	0x00
+	call	_write_line	; write to line 0 (0x00 on E1)
+	movlw	0x02
+	call	lcd_select
+	movlw	0
+	call	_read_line	; read line 2 (0x00 on E2)
+	movlw	0x01
+	call	lcd_select
+	movlw	0x40
+	call	_write_line	; write to line 1 (0x40 on E1)
+	movlw	0x02
+	call	lcd_select
+	movlw	0x40
+	call	_read_line	; read line 3 (0x40 on E2)
+	;; clear second display, then write line 3 to line 2
+	movlw	0x01		; "clear" command
+	call	lcd_send_command
+	movlw	0x02
+	call	lcd_select
+	movlw	0x00		; write to line 2 (0x00 on E2)
+	call	_write_line
+
+	;; And leave the cursor @ Y=3 (fourth line), X=0.
+	clrf	lcd_x
+	movlw	3
+	movwf	lcd_y
+	goto	_position_cursor
+
+;;; _store_byte
+;;;  store the byte that's in W in our memory-resident shadow buffer at the
+;;;  right position.
+_store_byte:
+	;; FIXME? Consulting the LCD's memory buffer. If that's fast enough,
+	;; we can ditch _store_byte.
 	return
 	
 ;;; _wait_bf:
@@ -263,23 +465,23 @@ handle_cr:
 _wait_bf:
 	START_READ_BF
 	btfss	LCD_E1_TEST
-	goto	dont_bf_test_e1
-bf_retry_e1:
+	goto	_dont_bf_test_e1
+_bf_retry_e1:
 	ASSERT_E1
  	READ_BF_AND_SKIP	; skip next statement if BF is clear (unbusy)
-	goto	bf_retry_e1
+	goto	_bf_retry_e1
 	DEASSERT_E1
 
-dont_bf_test_e1:	
+_dont_bf_test_e1:	
 	btfss	LCD_E2_TEST
-	goto	dont_bf_test_e2
-bf_retry_e2:
+	goto	_dont_bf_test_e2
+_bf_retry_e2:
 	ASSERT_E2
 	READ_BF_AND_SKIP
-	goto	bf_retry_e2
+	goto	_bf_retry_e2
 	DEASSERT_E2
 
-dont_bf_test_e2:
+_dont_bf_test_e2:
 	bcf	LCD_RW
 	
 	RESET_BF
@@ -305,8 +507,42 @@ lcd_send_command:
 	movwf	lcd_tmp
 	call	_wait_bf
 	movfw	lcd_tmp
-	
-	;; FIXME: need to alter lcd_pos appropriately?
+
+	;; If it's a clear command, reset the cursor appropriately.
+	xorlw	0x01
+	skpz
+	goto	_lsc_not_clear
+	clrf	lcd_x
+	;; If it's a command for E2, then we're on line 2. Else line 0.
+	clrf	lcd_y		; assume line 0
+	btfsc	LCD_E2_TEST
+	bsf	lcd_y, 1	; if for E2, then it's line 2
+_lsc_not_clear:
+	xorlw	0x01		;undo the damage to W
+
+	;; if W & 0x80 == 0x80, then it's a reposition command, and we need to
+	;; set the cursor appropriately.
+	andlw	0x80
+	xorlw	0x80
+	skpz
+	goto	_lsc_not_reposition
+	;; Determine which line we're on
+	clrf	lcd_y		; assume we're on line 0/1
+	btfsc	LCD_E2_TEST
+	bsf	lcd_y, 1	; if for E2, then we're on 2/3
+	;; Get the address we're telling the LCD to move to
+	movfw	lcd_tmp		; get back the argument
+	andlw	0x40		; check the "second line" bit
+	xorlw	0x40		; FIXME: shouldn't be necessary, but is - check logic of previous line and following skip!
+	skpnz
+	incf	lcd_y, F	; yep, second line of the display
+	movfw	lcd_tmp		; get back the argument again
+	andlw	0x3F		; and get back the position on the line
+	movwf	lcd_x		;  which is simply our X position
+
+
+_lsc_not_reposition:
+	movfw	lcd_tmp		; restore the original argument
 	
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
@@ -351,132 +587,6 @@ _lcd_delay:
 	goto    $-3
 	return
 
-;;; _shift_buffer:
-;;;  used to shift our internal memory buffer of what's on the display, and
-;;;  update the LCD display to show the characters that we think belong there.
-;;;  This is fairly specific to the 16166.
-_shift_buffer:
-	;; save current lcd selection
-	movfw	lcd_selection
-	movwf	lcd_selection_tmp
-
-	;; select device #0
-	movlw	0x01
-	movwf	lcd_selection
-	
-	;; move to DD addr 0x00
-	movlw	b'10000000'
-	call	lcd_send_command
-
-	;; shift data left one byte, both on the display and in our ram cache
-	movlw	lcd_datal0c0+1
-	movwf	FSR
-
-	clrf	lcd_shift_tmp	; new cursor position
-loop:	
-	movfw	INDF
-	decf	FSR, F
-	movwf	INDF
-	incf	FSR, F
-	incf	FSR, F
-	movwf	lcd_shift_tmp2	; save the char
-
-	;; move to the right spot on the LCD
-	movfw	lcd_shift_tmp
-	call	lookup
-	iorlw	b'10000000'
-	call	lcd_send_command
-	;; write the character now
-	movfw	lcd_shift_tmp2
-	call	lcd_write
-
-	;; increment the counter and loop as req'd
-	incf	lcd_shift_tmp, F
-	movfw	lcd_shift_tmp
-	xorlw	scroll_point - 1 ; if we're at the end of the line, stop!
-	skpz
-	goto	loop
-
-	;; restore current line selection
-	;; save current lcd selection
-	movfw	lcd_selection_tmp
-	movwf	lcd_selection
-	
-	return
-
-clear_shadow_ram:
-	;; clear page0 and page1 of shadow ram (bytes 0x20 through 0x6F and
-	;; bytes 0xa0 through 0xef) with spaces, which matches what the display
-	;; would be displaying.
-	movlw	lcd_datal0c0
-	movwf	FSR
-repeat_pg0:	
-	movlw	' '
-	movwf	INDF
-	incf	FSR, F
-	movlw	lcd_datal1c39
-	xorwf	FSR, W
-	skpz
-	goto	repeat_pg0
-
-	movlw	lcd_datal2c0
-	movwf	FSR
-repeat_pg1:
-	movlw	' '
-	movwf	INDF
-	incf	FSR, F
-	movlw	lcd_datal3c39
-	xorwf	FSR, W
-	skpz
-	goto	repeat_pg1
-	return
-
-;;; dump_mem exists for debugging purposes
-dump_mem:
-	movlw	lcd_datal0c0
-	movwf	FSR
-	movlw	'\r'
-	fcall	putch_usart
-	movlw	'\n'
-	fcall	putch_usart
-
-	movlw	'0'
-	fcall	putch_usart
-	movlw	':'
-	fcall	putch_usart
-repeat_dump_l0:
-	movfw	INDF
-	fcall	putch_usart
-	incf	FSR, F
-	movlw	lcd_datal1c0
-	xorwf	FSR, W
-	skpz
-	goto	repeat_dump_l0
-
-	movlw	'\r'
-	fcall	putch_usart
-	movlw	'\n'
-	fcall	putch_usart
-	movlw	'1'
-	fcall	putch_usart
-	movlw	':'
-	fcall	putch_usart
-repeat_dump_l1:
-	movfw	INDF
-	fcall	putch_usart
-	incf	FSR, F
-	movlw	lcd_datal1c39 + 1
-	xorwf	FSR, W
-	skpz
-	goto	repeat_dump_l1
-	
-
-	movlw	'\r'
-	fcall	putch_usart
-	movlw	'\n'
-	fcall	putch_usart
-	return
-
 ;;; W, bit 0, determines on/off.
 lcd_set_backlight:
 	movwf	lcd_tmp
@@ -485,6 +595,43 @@ lcd_set_backlight:
 	btfsc	lcd_tmp, 0
 	bsf	PORTA, 4
 	return
+
+lcd_debug:
+	movlw	0x03
+	call	lcd_select	; select E1 + E2
+	movlw	0x01
+	call	lcd_send_command ; clear display
+	movlw	0x01
+	call	lcd_select	; select just E1
+	movlw	0x80
+	call	lcd_send_command ; goto position 0
+
+forever:	
+	movlw	'1'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	movlw	'2'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	movlw	'3'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	movlw	'4'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	movlw	'5'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	movlw	'6'
+	call	lcd_putch
+        movlw   255
+	call    _lcd_delay
+	goto	forever
 	
 	END
 

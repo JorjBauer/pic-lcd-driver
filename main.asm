@@ -88,9 +88,18 @@ main:
 	fcall	putch_usart
 	
 	fcall	init_lcd
-	
+
+	movlw	'!'		; preload the first character to echo back.
+	movwf	main_serial_tmp	; It's garbage, and can be ignored...
 loop:
-	;; wait for a char on the serial port
+	;; echo back the previous character.
+	banksel main_serial_tmp
+	movfw   main_serial_tmp
+	banksel	0
+        lcall   putch_usart
+	
+	;; wait for a char on the serial port. Save a copy of it, as we need
+	;; to echo it back again after we've performed the appropriate action.
 	lcall	getch_usart
 	banksel	main_serial_tmp
 	movwf	main_serial_tmp
@@ -127,7 +136,7 @@ not_escape_char:
 	goto	is_meta_escape_char
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_tmp	
-	lcall	lcd_write
+	lcall	lcd_putch
 	goto loop
 
 	;; meta-escape mode is 0x7C -- used to set properties of comms. Right
@@ -141,6 +150,8 @@ meta_escape_mode:
 	call	handle_backlight_meta
 	btfsc	arg1, 2
 	call	handle_select_meta
+	btfsc	arg1, 7
+	call	handle_debug_meta
 	goto	loop
 handle_backlight_meta:
 	;; bit 3 determines LCD on/off. Send 0/1 in W based on that bit.
@@ -156,6 +167,8 @@ handle_select_meta:
 	andlw	0x03
 	fcall	lcd_select
 	return
+handle_debug_meta:
+	lgoto	lcd_debug
 
 	END
 
