@@ -211,7 +211,7 @@ _not_eol:
 	
 	;; Put the character on the display in the current position, as well
 	;; as in our memory buffer.
-#if 1
+#if 0
 	;; debugging!
 	call	_position_cursor
 #endif	
@@ -562,6 +562,9 @@ _lsc_not_clear:
 
 _lsc_not_reposition:
 	movfw	lcd_tmp		; restore the original argument
+
+	;; FIXME: what if it's a "disable cursor" command? We should disable
+	;; the cursor in _position_cursor...
 	
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
