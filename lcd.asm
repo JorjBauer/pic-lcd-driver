@@ -434,8 +434,27 @@ _scroll:
 	movlw	0x40
 	call	_read_line	; read line 3 (0x40 on E2)
 	;; clear second display, then write line 3 to line 2
+#if 1
+	;; There's nothing technically wrong with this. It takes up to 4.1mS
+	;; to complete.
 	movlw	0x01		; "clear" command
 	call	lcd_send_command
+#else
+	;; This is equivalent, by brute-force setting spaces on the last line.
+	;; Its worst-case performance is somewhere around 7mS, but it uses the
+	;; busy flag, so may operate faster depending on the LCD...
+	clrf	lcd_x
+	movlw	3
+	movwf	lcd_y
+	call	_position_cursor
+	
+	movlw	line_width
+	movwf	lcd_read_tmp1
+_l	movlw	' '
+	call	lcd_write
+	decfsz	lcd_read_tmp1
+	goto	_l
+#endif
 	movlw	0x02
 	call	lcd_select
 	movlw	0x00		; write to line 2 (0x00 on E2)
