@@ -34,6 +34,8 @@ init_lcd:
 	banksel	lcd_x
 	clrf	lcd_x
 	clrf	lcd_y
+	movlw	0x03
+	movwf	cursor_bits	; default low 2 bits for "cursor on"
 
 	init_tris		; from pins.inc
 
@@ -198,6 +200,9 @@ _is_eol:
 	skpnz
 	call	_scroll		; yes, so scroll display.
 
+	;; Make sure the cursor is in the right spot on the screen.
+	call	_position_cursor
+
 	;; fall through and print the new character.
 	
 _not_eol:
@@ -209,16 +214,9 @@ _not_eol:
 	skpnz
 	goto	_handle_cr
 	
-	;; Put the character on the display in the current position, as well
-	;; as in our memory buffer.
-#if 0
-	;; debugging!
-	call	_position_cursor
-#endif	
+	;; Put the character on the display.
 	movfw	lcd_arg
 	call	lcd_write	; write the char to the display.
-	movfw	lcd_arg
-	call	_store_byte	; store it in our memory buffer, too.
 	
 	;; Move to the next character on the line. We'll do end-of-line
 	;; wrapping when we receive the next character. (Or not, if we instead
@@ -274,6 +272,44 @@ _handle_backspace:
 ;;;  enable the cursor on E1 or E2, and put it at the right x/y based on
 ;;;  the current contents of lcd_x and lcd_y.
 _position_cursor:
+	;; Before we start, see if we're at X==line_width and Y%2==1. If so,
+	;; we're not on the display we think we are, and need to handle the
+	;; cursor positioning a little oddly.
+
+	btfsc	lcd_y, 0
+	goto	_pc_1
+	movfw	lcd_x
+	xorlw	line_width
+	skpz
+	goto	_pc_1
+	;; Yes, we're in the special case. Is it on E1?
+	btfss	LCD_E2_TEST
+	goto	_pc_special_e1
+	;; It's E2, so we disable the cursor on both.
+	movlw	0x03
+	call	lcd_select
+	movlw	b'00001100'	; disable cursor
+	call	_lcd_send_command_raw
+	movlw	0x02		; finish with the selection on E2...
+	call	lcd_select
+	goto	_pc_finish
+_pc_special_e1:
+	;; It's E1, so put the cursor on E2 @ position 0, and disable the
+	;; cursor on E1.
+	movlw	0x01
+	call	lcd_select
+	movlw	b'00001100'	; disable cursor
+	call	_lcd_send_command_raw
+	movlw	0x02
+	call	lcd_select	; select E2
+	movlw	b'10000000' 	; move cursor to position 0
+	call	_lcd_send_command_raw
+	movlw	b'00001100'	; construct appropriate "enable cursor"
+	andwf	cursor_bits, W
+	goto	_lcd_send_command_raw
+	;; ... and this branch is now done.
+
+_pc_1:	
 	;; For a two-display system, we need to disable the cursor on the
 	;; "wrong" display, enable it on the "right" display, and also set
 	;; the current input position on the "right" display.
@@ -288,7 +324,7 @@ _position_cursor:
 
 	;; disable cursor on this one.
 	movlw	b'00001100'
-	call	lcd_send_command
+	call	_lcd_send_command_raw
 
 	btfsc	lcd_y, 1	; is it line 2 or 3?
 	movlw	0x02		; yes, select E2
@@ -296,17 +332,19 @@ _position_cursor:
 	movlw	0x01
 	call	lcd_select
 
-	;; enable cursor on this one.
-	movlw	b'00001111'
-	call	lcd_send_command
-
+	;; enable cursor on this one. Use our saved cursor state to determine
+	;; how C and B ("cursor on" and "blink") bits are set.
+	movlw	b'00001100'
+	andwf	cursor_bits, W
+	call	_lcd_send_command_raw
+_pc_finish:	
 	;; now position the cursor on the given display.
 	;; figure out how much has to be added to X for desired posn
 	movfw	lcd_x		; start with X position
 	btfsc	lcd_y, 0	; if (lcd_y%2) == 0, add none
 	addlw	0x40		; ... else add 0x40
 	iorlw	0x80		; either way, set the high bit ("move cursor")
-	goto	lcd_send_command
+	goto	_lcd_send_command_raw
 
 ;;; _write_line
 ;;;  write memory contents out to the line starting at offset given in W.
@@ -318,7 +356,7 @@ _write_line:
 
 	movfw	lcd_read_tmp1
 	addlw	0x80		; for "set ddram"
-	call	lcd_send_command ; set start position
+	call	_lcd_send_command_raw ; set start position
 
 	movlw	line_width
 	movwf	lcd_read_tmp1
@@ -394,7 +432,7 @@ _read_line:
 
 	movfw	lcd_read_tmp1
 	addlw	0x80		; 0x80 for "set ddram"
-	call	lcd_send_command ; set start position
+	call	_lcd_send_command_raw ; set start position
 
 	movlw	line_width
 	movwf	lcd_read_tmp1
@@ -466,14 +504,6 @@ _l	movlw	' '
 	movwf	lcd_y
 	goto	_position_cursor
 
-;;; _store_byte
-;;;  store the byte that's in W in our memory-resident shadow buffer at the
-;;;  right position.
-_store_byte:
-	;; FIXME? Consulting the LCD's memory buffer. If that's fast enough,
-	;; we can ditch _store_byte.
-	return
-	
 ;;; _wait_bf:
 ;;;  wait until the "Busy Flag" is clear, meaning that the LCD is capable of
 ;;;  taking its next command. It might make sense at some point to call this
@@ -563,8 +593,24 @@ _lsc_not_clear:
 _lsc_not_reposition:
 	movfw	lcd_tmp		; restore the original argument
 
-	;; FIXME: what if it's a "disable cursor" command? We should disable
-	;; the cursor in _position_cursor...
+	;; Check for cursor on/off commands...
+	andlw	0xF0
+	skpz
+	goto	_lsc_not_cursor
+	btfsc	lcd_tmp, 3
+	goto	_lsc_not_cursor
+	;; It's some sort of display control command. Might be turning off
+	;; the display, or setting the cursor state. We'll just keep the
+	;; cursor state bits, which we'll then use to update the cursor
+	;; state when we update cursors onscreen.
+	movlw	0x03
+	andwf	lcd_tmp, W
+	movwf	cursor_bits
+
+_lsc_not_cursor:
+	movfw	lcd_tmp		; restore the original argument
+_lcd_send_command_raw:	
+	;; Finally! Send the command to the LCD.
 	
 	CLEAR_RS_AND_RW
 	WRITE_W_ON_LCD
@@ -619,12 +665,14 @@ lcd_set_backlight:
 	return
 
 lcd_debug:
-	movlw	0x03
-	call	lcd_select	; select E1 + E2
+	movlw	0x02
+	call	lcd_select	; select E2
 	movlw	0x01
 	call	lcd_send_command ; clear display
 	movlw	0x01
 	call	lcd_select	; select just E1
+	movlw	0x01
+	call	lcd_send_command ; clear display
 	movlw	0x80
 	call	lcd_send_command ; goto position 0
 

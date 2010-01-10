@@ -6,6 +6,7 @@
 #define lcd_datal0c39 0x47	; ... last byte in that buffer.
 
 ;;; main.asm
+#define cursor_bits 0x48
 #define main_serial_tmp 0x49
 #define main_lcd_mode 0x4A
 
