@@ -4,6 +4,7 @@
 	include "common.inc"
 	include "piceeprom.inc"
 	include "serial.inc"
+	include "version.inc"
 	
 	GLOBAL	init_lcd
 	GLOBAL	lcd_write	; raw action
@@ -123,7 +124,26 @@ init_lcd:
 	lcall	lcd_putch
 	movlw	'2'
 	lcall	lcd_putch
-
+	movlw	':'
+	lcall	lcd_putch
+	
+        movlw   version_0
+	call   lcd_puthex
+	movlw   version_1
+	call   lcd_puthex
+	movlw   version_2
+	call   lcd_puthex
+	movlw   version_3
+	call   lcd_puthex
+	movlw   version_4
+	call   lcd_puthex
+	movlw   version_5
+	call   lcd_puthex
+	movlw   version_6
+	call   lcd_puthex
+	movlw   version_7
+	call   lcd_puthex
+	
 	;; delay to show startup banner, then clear display and let it run. If
 	;; we were allowing multiple serial configurations, this would be the
 	;; place to look for a 'reset the EEPROM' command. This
@@ -702,6 +722,39 @@ forever:
         movlw   255
 	call    _lcd_delay
 	goto	forever
+
+lcd_puthex:
+	swapf  hex_tmp, W
+	banksel 0
+	andlw   0x0F 	; grab low 4 bits of serial_work_tmp
+	sublw   0x09	; Is it > 9?
+	skpwgt		;   ... yes, so skip the next line
+	goto    _send_under9 ; If so, go to send_under9
+	sublw   0x09	; undo what we did
+	addlw   'A' - 10 ; make it ascii
+	goto    _send_hex
+_send_under9:
+	sublw   0x09    ; undo what we did
+	addlw   '0'     ; make it ascii
+_send_hex:
+	call    lcd_putch
+
+	movfw   hex_tmp
+	banksel 0
+	andlw   0x0F
+	sublw   0x09
+	skpwgt
+	goto    _send_under9_2
+	sublw   0x09    ; undo what we did
+	addlw   'A' - 10 ; make it ascii
+	goto    lcd_putch
+
+_send_under9_2:
+	sublw   0x09    ; undo what we did
+	addlw   '0'     ; make it ascii
+	goto    lcd_putch
+	
+	return
 	
 	END
 

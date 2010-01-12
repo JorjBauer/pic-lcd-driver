@@ -1,0 +1,9 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+chomp(my $v = `git log --pretty=oneline -1`);
+foreach my $i (0..7) {
+    print "#define version_$i 0x" . substr($v, $i*2, 2) . "\n";
+}

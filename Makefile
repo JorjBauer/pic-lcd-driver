@@ -15,7 +15,7 @@ main.hex: $(OBJECTS) main.o $(SCRIPT)
 	gpasm $(CFLAGS) -c -w2 $<
 
 clean:
-	rm -f *~ *.o *.lst *.map *.hex *.cod *.cof memory.hint main.gif *.bin
+	rm -f *~ *.o *.lst *.map *.hex *.cod *.cof memory.hint main.gif *.bin version.inc
 
 test.hex: testmain.o
 	gplink --map -c -s $(SCRIPT) -o test.hex testmain.o
@@ -28,3 +28,11 @@ disassemble: main.hex memory.hint
 
 install: main.hex
 	picp $(SERIAL) 16f627a -ef && picp $(SERIAL) 16f627a -wc `./perl-flags-generator main.hex` -s -wp main.hex
+
+lcd.o: version.inc
+
+version.inc:
+	./perl-version-generator > version.inc
+
+.PHONY: version.inc
+

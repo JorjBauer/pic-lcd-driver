@@ -14,6 +14,7 @@
 #define echo_buf 0x4B
 
 #define main_serial_getch 0x4C
+#define hex_tmp           0x4C	; yes, same as main_serial_getch
 
 #define	sbuf_tmpw 0x4D
 #define sbuf_rsize 0x4E
