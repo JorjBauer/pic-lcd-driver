@@ -1,8 +1,8 @@
-        Processor       16f627
+        Processor       16f627a
         Radix           DEC
         EXPAND
 
-        include         "p16f627.inc"
+        include         "p16f627a.inc"
 
 ;;; pins specific to serial on this processor
 #define USART_X_TRIS TRISB
