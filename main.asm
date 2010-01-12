@@ -2,6 +2,7 @@
 	include "common.inc"
 	include "memory.inc"
 	include "serial.inc"
+	include "serbuf.inc"
 	include "lcd.inc"
 
 	__CONFIG ( _CP_OFF & _LVP_OFF & _BODEN_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT & _MCLRE_OFF )
@@ -33,23 +34,7 @@ Interrupt:
 	movwf   save_fsr
 
 ;;; handle interrupt working here
-	;; RCIF is cleared automatically by hardware when we read RCREG.
-	;; grab the serial character into INDF
-	movfw	sbuf_wptr
-	movwf	FSR
-#if 1
-	fcall	getch_usart
-#else
-	movfw	RCREG
-#endif
-	movwf	INDF
-	incf	sbuf_size, F
-	incf	sbuf_wptr, F
-	movfw	sbuf_wptr
-	xorlw	end_serial_buffer+1
-	movlw	serial_buffer	; doesn't change Z
-	skpnz
-	movwf	sbuf_wptr
+	SERBUF_INTERRUPT
 	
 ;;; clean up everything we saved...
 	movfw   save_fsr
@@ -89,89 +74,60 @@ main:
 	fcall	init_memory
 	
 	fcall	init_serial
+	SERBUF_INIT
 
 	movlw	'I'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'n'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'i'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	't'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'i'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'a'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'l'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'i'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'z'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'i'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'n'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'g'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'.'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'.'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'.'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'.'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'\r'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	movlw	'\n'
-	fcall	putch_usart
+	fcall	putch_usart_buffered
 	
 	fcall	init_lcd
 
 	movlw	'!'		; preload the first character to echo back.
 	movwf	main_serial_getch ; It's garbage, and can be ignored...
 
-	;; set up serial interrupt. All serial input goes back into our buffer,
-	;; which is then emptied in the main loop (below).
-	movlw	serial_buffer
-	movwf	sbuf_rptr
-	movwf	sbuf_wptr
-
-	banksel	PIE1
-	bsf	PIE1, RCIE
-	banksel	0
-	bsf	INTCON, PEIE
-	bsf	INTCON, GIE
-	
 main_loop:
 	;; echo back the previous character.
 	movfw   main_serial_getch
 	banksel	0
-        lcall   putch_usart
+        lcall   putch_usart_buffered
 	
 	;; wait for a char on the serial port. Save a copy of it, as we need
 	;; to echo it back again after we've performed the appropriate action.
-_ml_spin:	
-	movfw	sbuf_size
-	addlw	0		; shouldn't be necessary, since movf should update Z... ?
-	skpnz
-	goto	_ml_spin
-
-	;; pull a byte off of the queue...
-	movfw	sbuf_rptr
-	movwf	FSR
-	movfw	INDF
-	movwf	main_serial_getch	; save the character
-	decf	sbuf_size, F		; and decrease the num bytes in buffer
-	incf	sbuf_rptr, F		; move to next char in buffer
-	movfw	sbuf_rptr		; check: did we reach the end of buf?
-	xorlw	end_serial_buffer+1
-	movlw	serial_buffer	; doesn't affect Z
-	skpnz
-	movwf	sbuf_rptr	; yes, so roll around to start of buffer
-	movfw	main_serial_getch
-	;; end of pulling byte off of queue
+	fcall	getch_usart_buffered
+	movwf	main_serial_getch
 
 	;; W now contains the character read from serial
 	btfss	main_lcd_mode, 0 ; did we just receive an escape char?
@@ -206,7 +162,7 @@ not_escape_char:
 	goto	is_meta_escape_char
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_getch
-	lcall	lcd_putch
+	lcall	lcd_write	; or lcd_putch for cooked input
 	goto main_loop
 
 	;; meta-escape mode is 0x7C -- used to set properties of comms. Right
