@@ -15,11 +15,13 @@
 
 #define main_serial_getch 0x4C
 
-#define sbuf_size 0x4D		; how many bytes are in the buffer
-#define sbuf_rptr 0x4E		; current read pointer into the buffer
-#define sbuf_wptr 0x4F		; current write pointer into the buffer
-#define serial_buffer 0x50	; 32 bytes of serial buffer
-#define end_serial_buffer 0x6F
+#define	sbuf_tmpw 0x4D
+#define sbuf_rsize 0x4E
+#define sbuf_rptr_out 0x4F
+#define sbuf_tmpr 0x50
+#define sbuf_rptr_in 0x51
+#define start_serial_rbuffer 0x52
+#define end_serial_rbuffer 0x6F
 
 #define lcd_tmr0 0x70
 #define lcd_tmr1 0x71
