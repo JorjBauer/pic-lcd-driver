@@ -15,6 +15,8 @@ $|=1;
 #my $dev = "/dev/tty.KeySerial1";
 my $dev = "/dev/tty.SocketCSA4156F7-SocketS";
 
+my $blip = 0;
+
 # Set up the serial port
 my $quiet = 1;
 my $port = Device::SerialPort->new($dev, $quiet, undef)
@@ -139,7 +141,6 @@ undef $port;
 
 exit 0;
 
-my $blip = 0;
 sub print_blip {
     my ($port) = @_;
 
