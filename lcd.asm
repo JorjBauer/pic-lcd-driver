@@ -22,6 +22,9 @@
 	
 .piclcd	code
 
+	;; alignment to avoid having to use lgoto/fcall everywhere...
+	org	0x100
+
 ;;; init_lcd:
 ;;;  Initializes the LCD, mostly per the documentation. Unfortunately the
 ;;;  (printed) docs I've got appear to be wrong (or at least the procedure
@@ -93,39 +96,39 @@ init_lcd:
 	
 	;; write an init message to the display
 	movlw	' '
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	' '
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	' '
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'L'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'C'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'D'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	' '
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'S'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'l'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'e'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'd'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	' '
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'v'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'0'
-	lcall	lcd_putch
+	call	lcd_putch
 	movlw	'.'
-	lcall	lcd_putch
-	movlw	'2'
-	lcall	lcd_putch
+	call	lcd_putch
+	movlw	2
+	call	lcd_puthex
 	movlw	':'
-	lcall	lcd_putch
+	call	lcd_putch
 	
         movlw   version_0
 	call   lcd_puthex
@@ -724,6 +727,7 @@ forever:
 	goto	forever
 
 lcd_puthex:
+	movwf	hex_tmp
 	swapf  hex_tmp, W
 	banksel 0
 	andlw   0x0F 	; grab low 4 bits of serial_work_tmp
