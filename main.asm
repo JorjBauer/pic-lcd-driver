@@ -114,7 +114,7 @@ main:
 	fcall	putch_usart_buffered
 	
 	fcall	init_lcd
-
+	
 	movlw	'!'		; preload the first character to echo back.
 	movwf	main_serial_getch ; It's garbage, and can be ignored...
 
@@ -162,7 +162,7 @@ not_escape_char:
 	goto	is_meta_escape_char
 	;; otherwise send it to the LCD display.
 	movfw	main_serial_getch
-	lcall	lcd_write	; or lcd_putch for cooked input
+	lcall	lcd_putch
 	goto main_loop
 
 	;; meta-escape mode is 0x7C -- used to set properties of comms. Right

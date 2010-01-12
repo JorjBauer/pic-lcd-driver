@@ -22,7 +22,9 @@
 #define sbuf_tmpr 0x50
 #define sbuf_rptr_in 0x51
 #define start_serial_rbuffer 0x52
-#define end_serial_rbuffer 0x6F
+#define end_serial_rbuffer 0x6E
+
+#define lcd_raw_mode 0x6F
 
 #define lcd_tmr0 0x70
 #define lcd_tmr1 0x71

@@ -8,7 +8,7 @@
 	
 	GLOBAL	init_lcd
 	GLOBAL	lcd_write	; raw action
-	GLOBAL	lcd_putch	; buffered action
+	GLOBAL	lcd_putch	; buffered action (auto-reverts to raw)
 	GLOBAL	lcd_select
 	GLOBAL	lcd_send_command
 	GLOBAL	lcd_set_backlight
@@ -38,6 +38,7 @@ init_lcd:
 	banksel	lcd_x
 	clrf	lcd_x
 	clrf	lcd_y
+	clrf	lcd_raw_mode	; start in "cooked" mode
 	movlw	0x03
 	movwf	cursor_bits	; default low 2 bits for "cursor on"
 
@@ -193,8 +194,13 @@ skip_write_e1:
 ;;; lcd_putch:
 ;;;  take character in 'W' and place it on the LCD. This includes scrolling
 ;;;  the existing text if required. (This should be the primary method used
-;;;  to put characters on the display.)
+;;;  to put characters on the display.) If we get a command to move the
+;;;  cursor anywhere on the display, we enter "raw" mode and stop trying to
+;;;  buffer/shift data around the display.
 lcd_putch:
+	btfsc	lcd_raw_mode, 0	; Are we in "raw" mode? If so,
+	goto	lcd_write	;   do a raw write instead of this...
+	
 	movwf	lcd_arg		; save it for later
 
 	xorlw	8		; backspace?
@@ -580,6 +586,9 @@ lcd_send_command:
 	call	_wait_bf
 	movfw	lcd_tmp
 
+	btfsc	lcd_raw_mode, 0	; if we're in raw mode, then just go there
+	goto	_lcd_send_command_raw
+	
 	;; If it's a clear command, reset the cursor appropriately.
 	xorlw	0x01
 	skpz
@@ -598,20 +607,8 @@ _lsc_not_clear:
 	xorlw	0x80
 	skpz
 	goto	_lsc_not_reposition
-	;; Determine which line we're on
-	clrf	lcd_y		; assume we're on line 0/1
-	btfsc	LCD_E2_TEST
-	bsf	lcd_y, 1	; if for E2, then we're on 2/3
-	;; Get the address we're telling the LCD to move to
-	movfw	lcd_tmp		; get back the argument
-	andlw	0x40		; check the "second line" bit
-	xorlw	0x40		; FIXME: shouldn't be necessary, but is - check logic of previous line and following skip!
-	skpnz
-	incf	lcd_y, F	; yep, second line of the display
-	movfw	lcd_tmp		; get back the argument again
-	andlw	0x3F		; and get back the position on the line
-	movwf	lcd_x		;  which is simply our X position
-
+	;; Any attempt to reposition the cursor puts us into "raw" mode.
+	bsf	lcd_raw_mode, 0
 
 _lsc_not_reposition:
 	movfw	lcd_tmp		; restore the original argument
