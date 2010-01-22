@@ -136,6 +136,10 @@ is_escape_mode:
 	;; last received an escape character, so clear the escape mode, send
 	;; this character as a command to the LCD, and then loop.
 	bcf	main_lcd_mode, 0
+	
+	;; make sure the LCD is in raw mode
+	bsf	lcd_raw_mode, 0	; FIXME: poking into LCD's space!
+	
 	movfw	main_serial_getch
 	fcall	lcd_send_command
 	goto	main_loop
@@ -172,6 +176,10 @@ not_escape_char:
 meta_escape_mode:
 	bcf	main_lcd_mode, 1 ;turn off meta-escape mode
 	movwf	arg1
+
+	;; make sure the LCD is in raw mode
+	bsf	lcd_raw_mode, 0	; FIXME: poking into LCD's space!
+	
 	btfsc	arg1, 4
 	call	handle_backlight_meta
 	btfsc	arg1, 2
