@@ -33,6 +33,7 @@
 #define lcd_tmp 0x74
 #define lcd_arg 0x75
 #define lcd_read_tmp1 0x76
+#define lcd_select_tmp 0x77
 
 #define lcd_write_tmp 0x78
 #define lcd_selection 0x79

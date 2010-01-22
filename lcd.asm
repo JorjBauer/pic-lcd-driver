@@ -9,6 +9,7 @@
 	GLOBAL	init_lcd
 	GLOBAL	lcd_write	; raw action
 	GLOBAL	lcd_putch	; buffered action (auto-reverts to raw)
+	GLOBAL	lcd_flush	; wait for busy flag to be unset for E1/E2
 	GLOBAL	lcd_select
 	GLOBAL	lcd_send_command
 	GLOBAL	lcd_set_backlight
@@ -178,7 +179,7 @@ _startup_delay:
 ;;;  at all (i.e. if scrolling and buffering are not desired).
 lcd_write:
 	movwf	lcd_tmp
-	call	_wait_bf
+	call	lcd_flush
 	movfw	lcd_tmp
 	SET_RS_CLEAR_RW
 	WRITE_W_ON_LCD
@@ -260,6 +261,9 @@ _not_eol:
 ;;;   one of these bits must be set, or this module's code may do bad things
 ;;;   while waiting for the BF flag after sending commands...
 lcd_select:
+	movwf	lcd_select_tmp
+	call	lcd_flush	; before changing selection, flush buffers!
+	movfw	lcd_select_tmp
 	movwf	lcd_selection
 	btfsc	LCD_E1_TEST
 	return			; bit1 is set, so we don't need failsafe...
@@ -533,14 +537,14 @@ _l	movlw	' '
 	movwf	lcd_y
 	goto	_position_cursor
 
-;;; _wait_bf:
+;;; lcd_flush:
 ;;;  wait until the "Busy Flag" is clear, meaning that the LCD is capable of
 ;;;  taking its next command. It might make sense at some point to call this
 ;;;  before we make our next call, rather than after we send this one, which
 ;;;  would streamline commands a bit.
 ;;; Note that this will wait for both E1 and E2 to be clear, if both are
 ;;; selected.
-_wait_bf:
+lcd_flush:
 	START_READ_BF
 	btfss	LCD_E1_TEST
 	goto	_dont_bf_test_e1
@@ -583,7 +587,7 @@ _send_init:
 ;;;  to do that; this properly waits for the busy flag.
 lcd_send_command:
 	movwf	lcd_tmp
-	call	_wait_bf
+	call	lcd_flush
 	movfw	lcd_tmp
 
 	btfsc	lcd_raw_mode, 0	; if we're in raw mode, then just go there
